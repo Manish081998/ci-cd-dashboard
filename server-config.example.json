@@ -20,6 +20,7 @@
       "id": "example-web",
       "name": "Example Web",
       "type": "angular",
+      "repo": "your-org/example-web",
       "environments": {
         "uat": {
           "server": "",

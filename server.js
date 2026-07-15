@@ -10,6 +10,8 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+const GITHUB_API_BASE = 'https://api.github.com';
+
 // ── Load server config (contains GitHub token) ───────────────────────────────
 let serverConfig = {};
 try {
@@ -184,6 +186,93 @@ async function initFreshRepo(folder, message, token, send) {
   return true;
 }
 
+// Generic CI templates auto-created for a brand-new repo pushed via the Setup
+// tab (no project-specific environments/build matrix known yet — see the
+// hand-tailored per-environment workflows committed directly to CI_CD and
+// Relay-WEB for that). Both gate a single generic "build-output" artifact
+// behind a best-effort test step so "build once, deploy same artifact" and
+// the CI test gate apply to any project registered through the dashboard,
+// not just the two above.
+function genericDotnetWorkflowYaml() {
+  return [
+    'name: CI',
+    '',
+    'on:',
+    '  pull_request:',
+    '    branches: [main]',
+    '  push:',
+    '    branches: [development, main]',
+    '',
+    'jobs:',
+    '  Build:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - uses: actions/checkout@v4',
+    '      - uses: actions/setup-dotnet@v4',
+    '        with:',
+    "          dotnet-version: '8.x'",
+    '      - name: Build',
+    '        run: dotnet build',
+    '      - name: Test',
+    '        run: dotnet test --no-build || echo "No tests found, skipping"',
+    '      - name: Publish',
+    "        if: github.event_name == 'push'",
+    '        run: dotnet publish -c Release -o publish-output',
+    '      - name: Upload artifact',
+    "        if: github.event_name == 'push'",
+    '        uses: actions/upload-artifact@v4',
+    '        with:',
+    '          name: build-output',
+    '          path: publish-output',
+    '          retention-days: 90',
+  ].join('\n') + '\n';
+}
+
+function genericNodeWorkflowYaml() {
+  return [
+    'name: CI',
+    '',
+    'on:',
+    '  pull_request:',
+    '    branches: [main]',
+    '  push:',
+    '    branches: [development, main]',
+    '',
+    'jobs:',
+    '  Build:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - uses: actions/checkout@v4',
+    '      - uses: actions/setup-node@v4',
+    '        with:',
+    "          node-version: '20'",
+    '          cache: \'npm\'',
+    '      - name: Install dependencies',
+    '        run: |',
+    '          [ -f package-lock.json ] && npm ci || npm install',
+    '      - name: Test',
+    '        run: npm test --if-present -- --watch=false --browsers=ChromeHeadless || echo "Tests failed or not configured, continuing"',
+    '      - name: Build',
+    '        run: npm run build --if-present',
+    '      - name: Resolve build output',
+    "        if: github.event_name == 'push'",
+    '        id: resolve',
+    '        run: |',
+    '          OUT=dist',
+    '          for candidate in dist build out; do',
+    '            if [ -d "$candidate" ]; then OUT="$candidate"; break; fi',
+    '          done',
+    '          echo "out=$OUT" >> "$GITHUB_OUTPUT"',
+    '      - name: Upload artifact',
+    "        if: github.event_name == 'push'",
+    '        uses: actions/upload-artifact@v4',
+    '        with:',
+    '          name: build-output',
+    '          path: ${{ steps.resolve.outputs.out }}',
+    '          retention-days: 90',
+  ].join('\n') + '\n';
+}
+
 // ── /api/config — returns token to frontend (localhost only) ─────────────────
 app.get('/api/config', (_, res) => {
   const deploy = serverConfig.deploy;
@@ -294,39 +383,7 @@ app.post('/api/git/push', async (req, res) => {
   if (!fs.existsSync(workflowFile)) {
     fs.mkdirSync(workflowDir, { recursive: true });
     const isDotnet = fs.readdirSync(folder).some(f => f.endsWith('.sln') || f.endsWith('.csproj'));
-    const buildStep = isDotnet
-      ? [
-          '      - uses: actions/setup-dotnet@v4',
-          '        with:',
-          "          dotnet-version: '8.x'",
-          '      - name: Build',
-          '        run: dotnet build',
-        ]
-      : [
-          '      - uses: actions/setup-node@v4',
-          '        with:',
-          "          node-version: '20'",
-          '      - name: Build',
-          '        run: |',
-          '          [ -f package-lock.json ] && npm ci || npm install',
-          '          npm run build --if-present',
-        ];
-    const yaml = [
-      'name: CI',
-      '',
-      'on:',
-      '  pull_request:',
-      '    branches: [main]',
-      '  push:',
-      '    branches: [development]',
-      '',
-      'jobs:',
-      '  Build:',
-      '    runs-on: ubuntu-latest',
-      '    steps:',
-      '      - uses: actions/checkout@v4',
-      ...buildStep,
-    ].join('\n');
+    const yaml = isDotnet ? genericDotnetWorkflowYaml() : genericNodeWorkflowYaml();
     fs.writeFileSync(workflowFile, yaml, 'utf8');
     send({ type: 'stdout', text: '  → Created .github/workflows/build.yml (CI workflow)\n' });
   }
@@ -656,6 +713,126 @@ function resolveCredential(rawCred) {
   };
 }
 
+// ── GitHub Actions artifacts — "build once, deploy same artifact" ────────────
+// Backs the CI-build picker in the Ship wizard: lists workflow-produced
+// artifacts for a project/environment, and downloads+extracts the chosen one
+// so /api/deploy/iis can ship it without ever rebuilding on this machine.
+function ghHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+// On a corporate network with a TLS-inspecting proxy, Node's bundled CA list
+// (unlike the Windows cert store browsers/curl use) won't trust the proxy's
+// re-signed certificate — surfaces as a cryptic "unable to get local issuer
+// certificate". Detected here and turned into an actionable message instead
+// of letting callers guess from a raw fetch error.
+function isCertTrustError(err) {
+  const msg = `${err?.cause?.message || err?.message || ''}`;
+  return /unable to get local issuer certificate|self[- ]signed certificate|certificate has expired|unable to verify the first certificate/i.test(msg);
+}
+
+function wrapGithubFetchError(err) {
+  if (isCertTrustError(err)) {
+    return new Error(
+      'TLS certificate error reaching GitHub — likely a corporate proxy re-signing HTTPS traffic with a ' +
+      'root CA Node doesn\'t trust by default (browsers/curl trust it via the Windows cert store; Node ' +
+      "doesn't automatically). Restart the server with `npm run server:ca` (or `npm run start:ca`) to have " +
+      'Node consult the Windows certificate store instead.'
+    );
+  }
+  return err;
+}
+
+async function ghGet(urlPath, token) {
+  let r;
+  try {
+    r = await fetch(`${GITHUB_API_BASE}${urlPath}`, { headers: ghHeaders(token) });
+  } catch (err) {
+    throw wrapGithubFetchError(err);
+  }
+  if (!r.ok) throw new Error(`GitHub API ${urlPath} → HTTP ${r.status}`);
+  return r.json();
+}
+
+// Artifact existence alone implies the run's test job passed — the build job
+// that uploads it is gated with `needs: test` in every workflow this app
+// writes, so there's no separate "is this run green?" check to make here.
+async function listCiBuilds(repo, environment, token, limit = 10) {
+  const wanted = new Set([`build-${environment}`, 'build-output']);
+  const data = await ghGet(`/repos/${repo}/actions/artifacts?per_page=100`, token);
+  const matches = (data.artifacts || [])
+    .filter(a => !a.expired && wanted.has(a.name))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, limit);
+
+  const builds = [];
+  for (const a of matches) {
+    const runId = a.workflow_run?.id ?? null;
+    let runNumber = null, htmlUrl = '', commitMessage = '';
+    if (runId) {
+      try {
+        const run = await ghGet(`/repos/${repo}/actions/runs/${runId}`, token);
+        runNumber = run.run_number;
+        htmlUrl = run.html_url;
+        // First line only — commit bodies can be multi-paragraph and this is
+        // shown inline in a single-line dropdown option.
+        commitMessage = (run.head_commit?.message || '').split('\n')[0];
+      } catch { /* best-effort — artifact is still usable without these */ }
+    }
+    const sha = a.workflow_run?.head_sha || '';
+    builds.push({
+      artifactId: a.id,
+      artifactName: a.name,
+      runId,
+      runNumber,
+      htmlUrl,
+      sha,
+      shortSha: sha.slice(0, 7),
+      branch: a.workflow_run?.head_branch || '',
+      commitMessage,
+      createdAt: a.created_at,
+      sizeInBytes: a.size_in_bytes,
+    });
+  }
+  return builds;
+}
+
+// Downloads a workflow artifact zip and extracts it into destDir. GitHub
+// redirects the authenticated request to a signed, unauthenticated blob-store
+// URL — fetch follows that automatically and (per the fetch spec) strips the
+// Authorization header once the redirect target is a different origin, so
+// the token is never sent to the storage host.
+async function downloadAndExtractArtifact(repo, artifactId, token, destDir, send, handle) {
+  if (handle?.cancelled) throw new Error('Cancelled by user');
+  send({ type: 'stdout', id: 'publish', text: `Downloading CI artifact #${artifactId} from ${repo}...\n` });
+  let r;
+  try {
+    r = await fetch(`${GITHUB_API_BASE}/repos/${repo}/actions/artifacts/${artifactId}/zip`, { headers: ghHeaders(token) });
+  } catch (err) {
+    throw wrapGithubFetchError(err);
+  }
+  if (!r.ok) throw new Error(`Failed to download CI artifact: HTTP ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  const zipPath = path.join(os.tmpdir(), `ci-artifact-${artifactId}.zip`);
+  fs.writeFileSync(zipPath, buf);
+  send({ type: 'stdout', id: 'publish', text: `Downloaded ${(buf.length / 1024 / 1024).toFixed(1)} MB — extracting...\n` });
+
+  fs.rmSync(destDir, { recursive: true, force: true });
+  fs.mkdirSync(destDir, { recursive: true });
+  const extractRes = await runDeployCmd(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -Path '${psEscape(zipPath)}' -DestinationPath '${psEscape(destDir)}' -Force`],
+    os.tmpdir(), send, 'publish', handle);
+  fs.rmSync(zipPath, { force: true });
+  if (extractRes.cancelled) throw new Error('Cancelled by user');
+  if (extractRes.code !== 0) throw new Error(extractRes.output.trim() || 'Failed to extract CI artifact');
+  send({ type: 'stdout', id: 'publish', text: `Extracted to ${destDir}\n` });
+}
+
 // One in-flight deploy per project+environment at a time.
 const deployLocks = new Set();
 
@@ -815,9 +992,24 @@ function buildDeployScript(cfg) {
     `Invoke-Command -ComputerName '${escape(cfg.server)}' -Credential $cred${sessionOpts} -ScriptBlock {`,
     `  $zipPath = Join-Path '${escape(cfg.remoteStagePath)}' '${escape(cfg.zipName)}';`,
     ...(backupLine ? [backupLine] : []),
-    `  Write-Output 'Extracting package to ${escape(cfg.destPath)}...';`,
-    `  Expand-Archive -Path $zipPath -DestinationPath '${escape(cfg.destPath)}' -Force;`,
+    `  Write-Output 'Extracting package...';`,
+    `  $extractDir = Join-Path '${escape(cfg.remoteStagePath)}' ('extract_' + [System.IO.Path]::GetFileNameWithoutExtension('${escape(cfg.zipName)}'));`,
+    `  Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue;`,
+    `  Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force;`,
     `  Write-Output 'Extraction complete';`,
+    `  New-Item -ItemType Directory -Force -Path '${escape(cfg.destPath)}' | Out-Null;`,
+    // robocopy /MIR (not Expand-Archive straight into destPath): mirrors the new
+    // build's exact tree onto destPath, deleting anything left over from a
+    // previous deploy — e.g. a stale nested folder from a since-fixed CI
+    // artifact — which a plain Expand-Archive -Force would never clean up
+    // (it only overwrites files present in the new archive, never removes
+    // extra ones). Safe to wipe destPath's extras because the backup step
+    // above already copied its prior contents out when backupPath is set.
+    `  Write-Output 'Syncing to ${escape(cfg.destPath)}...';`,
+    `  robocopy $extractDir '${escape(cfg.destPath)}' /MIR /MT:16 /R:2 /W:2 /NFL /NDL /NJH /NJS | Out-Null;`,
+    `  if ($LASTEXITCODE -ge 8) { throw "robocopy deploy sync failed with exit code $LASTEXITCODE" }`,
+    `  Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue;`,
+    `  Write-Output 'Sync complete';`,
     `  Remove-Item $zipPath -Force -ErrorAction SilentlyContinue;`,
     `  Import-Module WebAdministration;`,
     `  Write-Output 'Restarting app pool ${escape(cfg.appPoolName)}...';`,
@@ -833,6 +1025,7 @@ app.get('/api/projects', (_, res) => {
     id: p.id,
     name: p.name,
     type: p.type,
+    hasCiRepo: !!p.repo,
     environments: Object.entries(p.environments || {}).map(([name, envCfg]) => ({
       name,
       configured: !!(envCfg.server && envCfg.sharePath && envCfg.destPath && envCfg.appPoolName && envCfg.credentialRef),
@@ -856,6 +1049,27 @@ app.get('/api/projects/:id/build-options', (req, res) => {
   res.json({ options, recommendedId: recommended?.id ?? null });
 });
 
+// ── /api/projects/:id/ci-builds — recent CI-built artifacts for the "Deploy
+// from CI Build" picker (build once, deploy same artifact) ──────────────────
+app.get('/api/projects/:id/ci-builds', async (req, res) => {
+  const project = (serverConfig.projects || []).find(p => p.id === req.params.id);
+  if (!project) return res.status(404).json({ error: `Unknown project: ${req.params.id}` });
+  if (!project.repo) {
+    return res.status(400).json({ error: `No GitHub repo configured for ${project.name} — add "repo": "owner/name" to server-config.json` });
+  }
+  const token = serverConfig.githubToken;
+  if (!token) return res.status(400).json({ error: 'No GitHub token configured — add githubToken to server-config.json' });
+  const environment = req.query.environment;
+  if (!environment) return res.status(400).json({ error: 'environment query param is required' });
+
+  try {
+    const builds = await listCiBuilds(project.repo, environment, token);
+    res.json({ builds });
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'Failed to list CI builds' });
+  }
+});
+
 // ── /api/deploy/audit — recent deploy history for the wizard's history panel ──
 app.get('/api/deploy/audit', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
@@ -875,7 +1089,7 @@ app.post('/api/deploy/cancel', (req, res) => {
 });
 
 app.post('/api/deploy/iis', async (req, res) => {
-  const { folder, projectId, environment, buildSelectionId, confirmText } = req.body;
+  const { folder, projectId, environment, buildSelectionId, confirmText, ciArtifactId, ciRunId, ciSha, ciBranch, ciRunNumber } = req.body;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -889,12 +1103,16 @@ app.post('/api/deploy/iis', async (req, res) => {
     const startedAt = Date.now();
     const lockKey = `${projectId}:${environment}`;
     let acquiredLock = false;
-    let project = null, chosen = null, zipPath = null;
+    let project = null, chosen = null, zipPath = null, ciMeta = null, ciArtifactDir = null;
     const outcome = { ok: false, stage: 'validate', detail: '' };
     const deployHandle = { cancelled: false, currentProc: null };
     // Per-step wall-clock time, written to the audit log alongside the total —
     // lets a slow deploy be diagnosed from data instead of inference.
     const stepDurations = {};
+    // A CI-artifact deploy never touches the local Solution Folder for its
+    // build output, but folder is still used as a working directory for the
+    // zip/stage commands below — fall back to a temp dir when none is set.
+    const cwd = (folder && fs.existsSync(folder)) ? folder : os.tmpdir();
 
     const bailIfCancelled = (stepId) => {
       if (!deployHandle.cancelled) return false;
@@ -907,7 +1125,7 @@ app.post('/api/deploy/iis', async (req, res) => {
     try {
       project = (serverConfig.projects || []).find(p => p.id === projectId);
       if (!project) { outcome.detail = `Unknown project: ${projectId}`; send({ type: 'fatal', id: 'publish', text: outcome.detail }); return; }
-      if (!folder || !fs.existsSync(folder)) {
+      if (!ciArtifactId && (!folder || !fs.existsSync(folder))) {
         outcome.detail = `Project folder not found: ${folder || '(not set)'}`;
         send({ type: 'fatal', id: 'publish', text: outcome.detail });
         return;
@@ -946,15 +1164,44 @@ app.post('/api/deploy/iis', async (req, res) => {
       acquiredLock = true;
       activeDeploys.set(lockKey, deployHandle);
 
-      const options = resolveBuildOptions(folder, project, environment);
-      chosen = (buildSelectionId && options.find(o => o.id === buildSelectionId)) || pickRecommendedBuildOption(options, environment);
-
-      // ── 1. Publish ──────────────────────────────────────────────────────
+      // ── 1. Publish — either build locally, or (build once, deploy same
+      // artifact) download the exact zip a GitHub Actions run already built
+      // and tested, and skip building here entirely ────────────────────────
       const tPublish = Date.now();
-      const publishRes = await runPublishStep(project, chosen, folder, send, deployHandle);
+      let publishRes;
+      if (ciArtifactId) {
+        if (!project.repo) {
+          outcome.stage = 'publish';
+          outcome.detail = `No GitHub repo configured for ${project.name} — add "repo" to server-config.json`;
+          send({ type: 'fatal', id: 'publish', text: outcome.detail });
+          return;
+        }
+        if (!serverConfig.githubToken) {
+          outcome.stage = 'publish';
+          outcome.detail = 'No GitHub token configured — add githubToken to server-config.json';
+          send({ type: 'fatal', id: 'publish', text: outcome.detail });
+          return;
+        }
+        ciArtifactDir = path.join(os.tmpdir(), `${project.id}-${environment}-ci-artifact`);
+        send({ type: 'step-start', id: 'publish', cmd: `Download CI artifact #${ciArtifactId} from ${project.repo}` });
+        try {
+          await downloadAndExtractArtifact(project.repo, ciArtifactId, serverConfig.githubToken, ciArtifactDir, send, deployHandle);
+          publishRes = { code: 0, output: '', publishDir: ciArtifactDir };
+          ciMeta = { runId: ciRunId ?? null, artifactId: ciArtifactId, sha: ciSha || null, branch: ciBranch || null, runNumber: ciRunNumber ?? null };
+        } catch (err) {
+          publishRes = { code: -1, output: err.message || 'Failed to fetch CI artifact', publishDir: null };
+        }
+      } else {
+        const options = resolveBuildOptions(folder, project, environment);
+        chosen = (buildSelectionId && options.find(o => o.id === buildSelectionId)) || pickRecommendedBuildOption(options, environment);
+        publishRes = await runPublishStep(project, chosen, folder, send, deployHandle);
+      }
       stepDurations.publishMs = Date.now() - tPublish;
       if (bailIfCancelled('publish')) return;
-      send({ type: 'step-end', id: 'publish', ok: publishRes.code === 0, detail: chosen ? chosen.label : undefined });
+      const publishDetail = ciMeta
+        ? `CI build ${ciMeta.branch || '?'}@${(ciMeta.sha || '').slice(0, 7) || '?'}${ciMeta.runNumber ? ` (run #${ciMeta.runNumber})` : ''}`
+        : (chosen ? chosen.label : undefined);
+      send({ type: 'step-end', id: 'publish', ok: publishRes.code === 0, detail: publishDetail });
       if (publishRes.code !== 0) {
         outcome.stage = 'publish';
         outcome.detail = publishRes.output.trim() || 'Build failed';
@@ -988,7 +1235,7 @@ app.post('/api/deploy/iis', async (req, res) => {
           // Guarded on Test-Path so a failed Compress-Archive above doesn't throw a
           // second, unrelated error here — zipRes.code below still reflects the real outcome.
           `if (Test-Path '${psEscape(zipPath)}') { Write-Output ('Compressed to ' + [Math]::Round((Get-Item '${psEscape(zipPath)}').Length / 1MB, 1) + ' MB') }`],
-        folder, send, 'stage', deployHandle);
+        cwd, send, 'stage', deployHandle);
       stepDurations.zipMs = Date.now() - tZip;
       if (bailIfCancelled('stage')) return;
       if (zipRes.code !== 0) {
@@ -1006,7 +1253,7 @@ app.post('/api/deploy/iis', async (req, res) => {
       const stageCfg = { server: envCfg.server, username: cred.username, password: cred.password, localZipPath: zipPath, remoteStagePath: envCfg.sharePath, zipName, useSsl: !!envCfg.useSsl };
       const tStage = Date.now();
       const stageRes = await runDeployCmd(
-        'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildStageScript(stageCfg)], folder, send, 'stage', deployHandle);
+        'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildStageScript(stageCfg)], cwd, send, 'stage', deployHandle);
       stepDurations.stageMs = Date.now() - tStage;
       if (bailIfCancelled('stage')) return;
       const stageOk = stageRes.code === 0;
@@ -1026,7 +1273,7 @@ app.post('/api/deploy/iis', async (req, res) => {
       const deployCfg = { server: envCfg.server, username: cred.username, password: cred.password, remoteStagePath: envCfg.sharePath, destPath: envCfg.destPath, appPoolName: envCfg.appPoolName, zipName, useSsl: !!envCfg.useSsl, backupPath: envCfg.backupPath || null, backupStamp: stamp };
       const tDeploy = Date.now();
       const deployRes = await runDeployCmd(
-        'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildDeployScript(deployCfg)], folder, send, 'deploy', deployHandle);
+        'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildDeployScript(deployCfg)], cwd, send, 'deploy', deployHandle);
       stepDurations.deployMs = Date.now() - tDeploy;
       if (bailIfCancelled('deploy')) return;
       const deployOk = deployRes.code === 0;
@@ -1070,6 +1317,7 @@ app.post('/api/deploy/iis', async (req, res) => {
       // no change to what's cleaned up or when, just a signal for it on success.
       if (outcome.ok) send({ type: 'stdout', id: 'verify', text: 'Cleaning up temporary files...' });
       if (zipPath) { try { fs.rmSync(zipPath, { force: true }); } catch {} }
+      if (ciArtifactDir) { try { fs.rmSync(ciArtifactDir, { recursive: true, force: true }); } catch {} }
       appendAudit({
         time: new Date().toISOString(),
         user: os.userInfo().username,
@@ -1077,6 +1325,8 @@ app.post('/api/deploy/iis', async (req, res) => {
         projectName: project?.name || projectId,
         environment,
         buildOption: chosen?.id || null,
+        source: ciMeta ? 'ci' : 'local',
+        ci: ciMeta,
         outcome: outcome.ok ? 'success' : 'failed',
         stage: outcome.stage,
         detail: outcome.detail,

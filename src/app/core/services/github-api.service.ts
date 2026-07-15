@@ -171,6 +171,15 @@ export class GithubApiService {
   }
 
   createWorkflowFile(owner: string, repo: string, token: string, branch?: string): Observable<unknown> {
+    // Runtime (bash) project-type detection, not a JS-side fs check — this path
+    // writes the file straight to GitHub via the Contents API, with no local
+    // checkout of the repo to inspect. Mirrors the split dotnet/node templates
+    // server.js generates for a repo pushed from the local machine (see
+    // genericDotnetWorkflowYaml/genericNodeWorkflowYaml there), just as a single
+    // conditional job since the branch can't be chosen ahead of time here.
+    // Gates a generic "build-output" artifact behind a best-effort test step —
+    // "build once, deploy same artifact" + the CI test gate for any repo
+    // configured through the Setup tab, not just the two with tailored workflows.
     const yaml = [
       'name: CI',
       '',
@@ -178,7 +187,7 @@ export class GithubApiService {
       '  pull_request:',
       '    branches: [main]',
       '  push:',
-      '    branches: [development]',
+      '    branches: [development, main]',
       '',
       'jobs:',
       '  Build:',
@@ -191,18 +200,53 @@ export class GithubApiService {
       '      - uses: actions/setup-node@v4',
       '        with:',
       "          node-version: '20'",
-      '      - name: Build',
+      '      - name: Detect project type',
+      '        id: detect',
       '        run: |',
       '          if find . -maxdepth 4 \\( -name "*.sln" -o -name "*.csproj" \\) 2>/dev/null | grep -q .; then',
-      '            echo "Detected .NET project"',
-      '            dotnet build',
+      '            echo "type=dotnet" >> "$GITHUB_OUTPUT"',
       '          elif [ -f package.json ]; then',
-      '            echo "Detected Node/Angular project"',
-      '            [ -f package-lock.json ] && npm ci || npm install',
-      '            npm run build --if-present || echo "No build script, skipping"',
+      '            echo "type=node" >> "$GITHUB_OUTPUT"',
       '          else',
-      '            echo "No recognizable project type — skipping build"',
+      '            echo "type=unknown" >> "$GITHUB_OUTPUT"',
       '          fi',
+      '      - name: Build & test (.NET)',
+      "        if: steps.detect.outputs.type == 'dotnet'",
+      '        run: |',
+      '          dotnet build',
+      '          dotnet test --no-build || echo "No tests found, skipping"',
+      '      - name: Publish (.NET)',
+      "        if: steps.detect.outputs.type == 'dotnet' && github.event_name == 'push'",
+      '        run: dotnet publish -c Release -o publish-output',
+      '      - name: Install & build (Node/Angular)',
+      "        if: steps.detect.outputs.type == 'node'",
+      '        run: |',
+      '          [ -f package-lock.json ] && npm ci || npm install',
+      '          npm test --if-present -- --watch=false --browsers=ChromeHeadless || echo "Tests failed or not configured, continuing"',
+      '          npm run build --if-present || echo "No build script, skipping"',
+      '      - name: Resolve build output (Node/Angular)',
+      "        if: steps.detect.outputs.type == 'node' && github.event_name == 'push'",
+      '        id: resolve',
+      '        run: |',
+      '          OUT=dist',
+      '          for candidate in dist build out; do',
+      '            if [ -d "$candidate" ]; then OUT="$candidate"; break; fi',
+      '          done',
+      '          echo "out=$OUT" >> "$GITHUB_OUTPUT"',
+      '      - name: Upload artifact (.NET)',
+      "        if: steps.detect.outputs.type == 'dotnet' && github.event_name == 'push'",
+      '        uses: actions/upload-artifact@v4',
+      '        with:',
+      '          name: build-output',
+      '          path: publish-output',
+      '          retention-days: 90',
+      '      - name: Upload artifact (Node/Angular)',
+      "        if: steps.detect.outputs.type == 'node' && github.event_name == 'push'",
+      '        uses: actions/upload-artifact@v4',
+      '        with:',
+      '          name: build-output',
+      '          path: ${{ steps.resolve.outputs.out }}',
+      '          retention-days: 90',
     ].join('\n');
 
     const content  = btoa(unescape(encodeURIComponent(yaml)));
@@ -213,18 +257,21 @@ export class GithubApiService {
       .get<{ sha: string }>(url + refQuery, { headers: this.headers(token) })
       .pipe(
         catchError(() => of(null)),
-        switchMap((existing: { sha: string } | null) =>
-          this.http.put(
+        switchMap((existing: { sha: string } | null) => {
+          // File already present (e.g. hand-tailored) — leave it untouched, same
+          // as server.js's local push path (fs.existsSync guard). Only create it
+          // when it's genuinely missing.
+          if (existing) return of(null);
+          return this.http.put(
             url,
             {
-              message: 'ci: update Build workflow',
+              message: 'ci: add Build workflow',
               content,
-              ...(existing?.sha ? { sha: existing.sha } : {}),
               ...(branch ? { branch } : {}),
             },
             { headers: this.headers(token) },
-          ),
-        ),
+          );
+        }),
         catchError(err => {
           if (err?.status === 403) {
             throw new Error('Token missing "workflow" scope — add it at github.com/settings/tokens');

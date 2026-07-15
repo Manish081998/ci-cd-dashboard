@@ -384,6 +384,17 @@
       }
 
       @if (!deployStarted()) {
+        @if (selectedProject()?.hasCiRepo) {
+          <div class="btn-group deploy-source-toggle">
+            <button type="button" class="btn-ghost" [class.active]="deploySource() === 'ci'" [disabled]="deployRunning()" (click)="setDeploySource('ci')">📦 Deploy CI Build</button>
+            <button type="button" class="btn-ghost" [class.active]="deploySource() === 'local'" [disabled]="deployRunning()" (click)="setDeploySource('local')">🏗 Build Locally</button>
+          </div>
+          <span class="hint">
+            @if (deploySource() === 'ci') { Ships the exact artifact a GitHub Actions run already built and tested — nothing rebuilds here. }
+            @else { Builds from the Solution Folder on this machine right now. }
+          </span>
+        }
+
         <div class="cfg-grid">
           <div class="field span2">
             <label>Environment</label>
@@ -393,22 +404,42 @@
               }
             </select>
           </div>
-          <div class="field span2">
-            <label>Build command
-              @if (buildOptionsLoading()) { <span class="hint">detecting…</span> }
-            </label>
-            @if (buildOptions().length) {
-              <select class="repo-select" [ngModel]="selectedBuildOptionId()" (ngModelChange)="selectedBuildOptionId.set($event)" [disabled]="deployRunning()">
-                @for (o of buildOptions(); track o.id) { <option [value]="o.id">{{ o.label }}</option> }
-              </select>
-            } @else if (buildOptionsError()) {
-              <span class="generate-error">⚠ {{ buildOptionsError() }}</span>
-            } @else if (selectedProject()?.type === 'prebuilt') {
-              <span class="hint">None — publish from Visual Studio first, this just ships the existing output.</span>
-            } @else {
-              <span class="hint">No build commands detected for this project.</span>
-            }
-          </div>
+
+          @if (deploySource() === 'ci') {
+            <div class="field span2">
+              <label>CI Build
+                @if (ciBuildsLoading()) { <span class="hint">loading…</span> }
+              </label>
+              @if (ciBuilds().length) {
+                <select class="repo-select" [ngModel]="selectedCiArtifactId()" (ngModelChange)="selectedCiArtifactId.set($event)" [disabled]="deployRunning()">
+                  @for (b of ciBuilds(); track b.artifactId) {
+                    <option [ngValue]="b.artifactId">{{ b.branch }}@{{ b.shortSha }} · run #{{ b.runNumber ?? '?' }} · {{ b.createdAt | date:'short' }}{{ b.commitMessage ? ' · ' + b.commitMessage : '' }}</option>
+                  }
+                </select>
+              } @else if (ciBuildsError()) {
+                <span class="generate-error">⚠ {{ ciBuildsError() }}</span>
+              } @else {
+                <span class="hint">No successful CI builds with an uploaded artifact found for this environment yet.</span>
+              }
+            </div>
+          } @else {
+            <div class="field span2">
+              <label>Build command
+                @if (buildOptionsLoading()) { <span class="hint">detecting…</span> }
+              </label>
+              @if (buildOptions().length) {
+                <select class="repo-select" [ngModel]="selectedBuildOptionId()" (ngModelChange)="selectedBuildOptionId.set($event)" [disabled]="deployRunning()">
+                  @for (o of buildOptions(); track o.id) { <option [value]="o.id">{{ o.label }}</option> }
+                </select>
+              } @else if (buildOptionsError()) {
+                <span class="generate-error">⚠ {{ buildOptionsError() }}</span>
+              } @else if (selectedProject()?.type === 'prebuilt') {
+                <span class="hint">None — publish from Visual Studio first, this just ships the existing output.</span>
+              } @else {
+                <span class="hint">No build commands detected for this project.</span>
+              }
+            </div>
+          }
 
           @if (selectedEnvInfo() && !selectedEnvInfo()!.configured) {
             <div class="field span4">
@@ -432,6 +463,9 @@
                 <span class="pdot" [class.green]="h.outcome === 'success'" [class.red]="h.outcome !== 'success'"></span>
                 <span class="mono-inline">{{ h.environment }}</span>
                 <span>{{ h.outcome === 'success' ? 'Succeeded' : 'Failed at ' + h.stage }}</span>
+                @if (h.ci?.sha) {
+                  <span class="hint mono-inline">📦 {{ h.ci?.branch }}@{{ h.ci?.sha?.slice(0, 7) }}{{ h.ci?.runNumber ? ' #' + h.ci?.runNumber : '' }}</span>
+                }
                 <span class="hint">{{ h.time | date:'short' }} · {{ h.user }}</span>
               </div>
             }

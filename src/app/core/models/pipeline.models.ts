@@ -87,6 +87,7 @@ export interface DeployProject {
   id: string;
   name: string;
   type: 'angular' | 'dotnet' | 'node' | string;
+  hasCiRepo: boolean;
   environments: DeployEnvironment[];
 }
 
@@ -105,6 +106,29 @@ export interface DeployRequest {
   folder: string;
   buildSelectionId?: string;
   confirmText?: string;
+  // Set when deploying a GitHub Actions artifact instead of building locally
+  // ("build once, deploy same artifact") — folder is still sent (some deploy
+  // plumbing uses it as a working directory) but its build output is ignored.
+  ciArtifactId?: number;
+  ciRunId?: number | null;
+  ciSha?: string | null;
+  ciBranch?: string | null;
+  ciRunNumber?: number | null;
+}
+
+// Maps to GET /api/projects/:id/ci-builds — a deployable GitHub Actions artifact
+export interface CiBuild {
+  artifactId: number;
+  artifactName: string;
+  runId: number | null;
+  runNumber: number | null;
+  htmlUrl: string;
+  sha: string;
+  shortSha: string;
+  branch: string;
+  commitMessage: string;
+  createdAt: string;
+  sizeInBytes: number;
 }
 
 // Maps to GET /api/deploy/audit
@@ -115,6 +139,8 @@ export interface DeployAuditEntry {
   projectName: string;
   environment: string;
   buildOption: string | null;
+  source?: 'local' | 'ci';
+  ci?: { runId: number | null; artifactId: number; sha: string | null; branch: string | null; runNumber: number | null } | null;
   outcome: 'success' | 'failed';
   stage: string;
   detail: string;

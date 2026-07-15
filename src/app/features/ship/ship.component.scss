@@ -152,7 +152,13 @@ input, .repo-select {
   padding: 7px 14px; font-size: 12px; cursor: pointer; white-space: nowrap;
   transition: all .15s;
   &:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-mid); }
+  &.active {
+    background: linear-gradient(135deg, #4C63E0, #8B5CF6);
+    color: #fff; border-color: transparent;
+    &:hover { background: linear-gradient(135deg, #4C63E0, #8B5CF6); color: #fff; }
+  }
 }
+.deploy-source-toggle { margin-bottom: 6px; }
 .generate-error {
   font-size: 11px; color: var(--red); margin-top: 4px; display: block;
 }

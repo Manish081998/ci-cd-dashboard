@@ -89,6 +89,38 @@ If this machine isn't domain-joined with the server, or you're deploying over VP
 
 The Ship tab is a 3-step wizard: **1. Select Project**, **2. Push & Ship**, **3. Deploy**. Pick the project once in Step 1; the Deploy to IIS card in Step 3 then only asks for an **environment** and (optionally override) a **build command**, then click **Deploy to IIS**. Environments named/flagged `production` require typing the environment name to confirm before deploying. A **Cancel** button appears while a deploy is running. Recent deploys for the selected project show underneath, pulled from `deploy-audit.log`.
 
+## Deploying from a CI build (build once, deploy same artifact)
+
+Step 3's Deploy to IIS card can deploy either a fresh local build (as above)
+or the exact `.zip` a GitHub Actions run already built and tested — nothing
+is rebuilt on this machine in the latter case. This needs one extra field
+per project in `server-config.json`:
+
+```json
+{
+  "id": "example-web",
+  "repo": "your-org/example-web"
+}
+```
+
+The workflow that produces the artifact must upload it under the name
+`build-<environment>` (e.g. `build-uat`, `build-production`) — or
+`build-output` for a single generic build not split per environment — and
+only after tests pass (`needs: test`), since the picker treats "artifact
+exists" as "this run is deployable". `CI_CD` and `Relay-WEB`'s
+`.github/workflows/build.yml` already do this per-environment; a repo
+registered fresh through the Setup tab gets a generic single-artifact
+version automatically.
+
+**Corporate proxy / "unable to get local issuer certificate":** the backend
+talks to `api.github.com` from Node, not the browser. If your network runs
+HTTPS through a TLS-inspecting proxy, browsers and `curl` trust its
+re-signed certificate via the Windows certificate store, but Node's own
+bundled CA list doesn't — GitHub calls fail with a certificate error. Fix:
+run the server with `npm run server:ca` (or `npm run start:ca` for both
+processes) instead of `npm run server` / `npm start` — this adds Node's
+`--use-system-ca` flag so it consults the same Windows trust store.
+
 ## Troubleshooting
 
 | Symptom                            | Cause                                                                                                       |

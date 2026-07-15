@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   Step, StepStatus, PrResult,
   BuildEvent, GitPushEvent, PipelineEvent, PipelineConfig, DeployEvent,
-  DeployProject, BuildOption, DeployAuditEntry, DeployRequest,
+  DeployProject, BuildOption, DeployAuditEntry, DeployRequest, CiBuild,
 } from '../../core/models/pipeline.models';
 import { GIT_STEPS, PIPE_STEPS, DEPLOY_STEPS } from '../../core/constants/pipeline.constants';
 import { GIT_SERVER_BASE } from '../../core/constants/api.constants';
@@ -125,6 +125,14 @@ export class ShipComponent {
   confirmText           = signal('');
   deployHistory         = signal<DeployAuditEntry[]>([]);
 
+  // ── Build source: a fresh local build (default, unchanged behavior) or the
+  // exact artifact a GitHub Actions run already built and tested ───────────
+  deploySource          = signal<'local' | 'ci'>('local');
+  ciBuilds              = signal<CiBuild[]>([]);
+  ciBuildsLoading       = signal(false);
+  ciBuildsError         = signal('');
+  selectedCiArtifactId  = signal<number | null>(null);
+
   selectedProject = computed<DeployProject | null>(() =>
     this.deployProjects().find(p => p.id === this.selectedProjectId()) ?? null);
 
@@ -135,6 +143,9 @@ export class ShipComponent {
 
   selectedBuildOption = computed<BuildOption | null>(() =>
     this.buildOptions().find(o => o.id === this.selectedBuildOptionId()) ?? null);
+
+  selectedCiBuild = computed<CiBuild | null>(() =>
+    this.ciBuilds().find(b => b.artifactId === this.selectedCiArtifactId()) ?? null);
 
   // ── Shared log ─────────────────────────────────────────────────────────
   log = signal<LogEntry[]>([]);
@@ -173,6 +184,7 @@ export class ShipComponent {
     const env = this.selectedEnvInfo();
     if (!this.selectedProject() || !env || !env.configured || this.deployRunning()) return false;
     if (this.requiresApproval() && this.confirmText().trim().toLowerCase() !== this.selectedEnvironment().toLowerCase()) return false;
+    if (this.deploySource() === 'ci' && !this.selectedCiArtifactId()) return false;
     return true;
   });
 
@@ -334,10 +346,19 @@ export class ShipComponent {
   selectProject(id: string) {
     this.selectedProjectId.set(id);
     this.confirmText.set('');
-    const envs = this.deployProjects().find(p => p.id === id)?.environments ?? [];
+    const project = this.deployProjects().find(p => p.id === id);
+    const envs = project?.environments ?? [];
     const preferred = envs.find(e => e.configured) ?? envs[0];
     this.selectedEnvironment.set(preferred?.name ?? '');
-    if (preferred) this.loadBuildOptions(); else { this.buildOptions.set([]); this.selectedBuildOptionId.set(''); }
+    this.deploySource.set('local');
+    this.selectedCiArtifactId.set(null);
+    if (preferred) {
+      this.loadBuildOptions();
+      if (project?.hasCiRepo) this.loadCiBuilds();
+    } else {
+      this.buildOptions.set([]); this.selectedBuildOptionId.set('');
+      this.ciBuilds.set([]);
+    }
     this.loadHistory();
     if (id) this.wizardStep.set(2);
   }
@@ -345,7 +366,34 @@ export class ShipComponent {
   selectEnvironment(name: string) {
     this.selectedEnvironment.set(name);
     this.confirmText.set('');
+    this.selectedCiArtifactId.set(null);
     this.loadBuildOptions();
+    if (this.selectedProject()?.hasCiRepo) this.loadCiBuilds(); else this.ciBuilds.set([]);
+  }
+
+  setDeploySource(source: 'local' | 'ci') {
+    this.deploySource.set(source);
+    if (source === 'ci' && !this.ciBuilds().length && !this.ciBuildsLoading()) this.loadCiBuilds();
+  }
+
+  async loadCiBuilds() {
+    const projectId = this.selectedProjectId();
+    const environment = this.selectedEnvironment();
+    if (!projectId || !environment) return;
+    this.ciBuildsLoading.set(true);
+    this.ciBuildsError.set('');
+    try {
+      const builds = await this.deploySvc.getCiBuilds(projectId, environment);
+      this.ciBuilds.set(builds);
+      const stillValid = builds.some(b => b.artifactId === this.selectedCiArtifactId());
+      if (!stillValid) this.selectedCiArtifactId.set(builds[0]?.artifactId ?? null);
+    } catch (err: any) {
+      this.ciBuilds.set([]);
+      this.selectedCiArtifactId.set(null);
+      this.ciBuildsError.set(err?.message ?? 'Failed to load CI builds');
+    } finally {
+      this.ciBuildsLoading.set(false);
+    }
   }
 
   /** Wizard step navigation — steps unlock in order but stay reachable via
@@ -358,6 +406,7 @@ export class ShipComponent {
     // Build options require the Solution Folder, which may only just have
     // been filled in on Step 2 — (re)detect them now that we're reaching Deploy.
     if (step === 3 && !this.buildOptions().length && !this.buildOptionsLoading()) this.loadBuildOptions();
+    if (step === 3 && this.selectedProject()?.hasCiRepo && !this.ciBuilds().length && !this.ciBuildsLoading()) this.loadCiBuilds();
   }
 
   canGoStep3(): boolean {
@@ -571,12 +620,20 @@ export class ShipComponent {
     this.deployStartedAt.set(Date.now());
     this.deployNowTick.set(Date.now());
 
+    const ciBuild = this.deploySource() === 'ci' ? this.selectedCiBuild() : null;
     const request: DeployRequest = {
       projectId: this.selectedProjectId(),
       environment: this.selectedEnvironment(),
       folder: this.solutionFolder,
       buildSelectionId: this.selectedBuildOptionId() || undefined,
       confirmText: this.requiresApproval() ? this.confirmText().trim() : undefined,
+      ...(ciBuild ? {
+        ciArtifactId: ciBuild.artifactId,
+        ciRunId: ciBuild.runId,
+        ciSha: ciBuild.sha,
+        ciBranch: ciBuild.branch,
+        ciRunNumber: ciBuild.runNumber,
+      } : {}),
     };
 
     this.deploySvc.streamDeploy(request).subscribe({

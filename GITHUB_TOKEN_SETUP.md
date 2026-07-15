@@ -20,7 +20,10 @@ Go to `https://github.com/settings/personal-access-tokens` → **Generate new to
 | Workflows       | Read and write | write `.github/workflows/build.yml` (Contents alone is NOT enough for this path) |
 | Administration  | Read and write | enable auto-merge, set branch protection |
 | Pull Requests  | Read and write | enable auto-merge, set branch protection |
+| Actions         | Read-only      | list workflow runs and download artifacts — needed for the Ship wizard's "Deploy CI Build" picker (build once, deploy same artifact) |
 | Metadata        | Read-only      | added automatically, mandatory baseline — leave it |
+
+Without **Actions: Read-only**, the CI-build picker fails with `Resource not accessible by personal access token` when listing or downloading artifacts — same failure mode as the Workflows-permission gotcha below, just for a different endpoint.
 
 Click **Generate token** and copy the value (starts with `github_pat_...`).
 

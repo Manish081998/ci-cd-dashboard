@@ -5,6 +5,8 @@
     "ng": "ng",
     "start": "concurrently \"node server.js\" \"ng serve\" --names \"GIT,NG\" --prefix-colors \"yellow,cyan\"",
     "server": "node server.js",
+    "start:ca": "concurrently \"node --use-system-ca server.js\" \"ng serve\" --names \"GIT,NG\" --prefix-colors \"yellow,cyan\"",
+    "server:ca": "node --use-system-ca server.js",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"

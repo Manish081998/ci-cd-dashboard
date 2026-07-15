@@ -4,28 +4,79 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [development]
+    branches: [development, main]
 
 jobs:
-  Build:
+  # Validates every PR into main and every push — gates deployment: the deploy
+  # backend only lists workflow runs whose conclusion is "success" as
+  # deployable CI builds (see /api/projects/:id/ci-builds in server.js).
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Build
+          cache: 'npm'
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+  # Builds the exact per-environment bundle the dashboard's IIS deploy step
+  # downloads and ships — "build once, deploy same artifact": nothing rebuilds
+  # this output again on the way to UAT or production.
+  build:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - environment: uat
+            build_args: '--base-href /CI_CD_Deployment/'
+          - environment: production
+            build_args: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (${{ matrix.environment }})
+        run: npx ng build ${{ matrix.build_args }}
+      - name: Resolve build output
+        id: resolve
         run: |
-          if find . -maxdepth 4 \( -name "*.sln" -o -name "*.csproj" \) 2>/dev/null | grep -q .; then
-            echo "Detected .NET project"
-            dotnet build
-          elif [ -f package.json ]; then
-            echo "Detected Node/Angular project"
-            [ -f package-lock.json ] && npm ci || npm install
-            npm run build --if-present || echo "No build script, skipping"
-          else
-            echo "No recognizable project type — skipping build"
+          OUT=dist/gitweb/browser
+          if [ ! -d "$OUT" ]; then OUT=dist/gitweb; fi
+          # SSR/prerendering builds emit index.csr.html instead of index.html —
+          # IIS with no Node SSR host needs index.html as the default document.
+          if [ ! -f "$OUT/index.html" ] && [ -f "$OUT/index.csr.html" ]; then
+            cp "$OUT/index.csr.html" "$OUT/index.html"
           fi
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+      - name: Write build metadata
+        run: |
+          cat > "${{ steps.resolve.outputs.out }}/ci-meta.json" <<EOF
+          {
+            "sha": "${{ github.sha }}",
+            "shortSha": "$(echo ${{ github.sha }} | cut -c1-7)",
+            "branch": "${{ github.ref_name }}",
+            "runNumber": "${{ github.run_number }}",
+            "runId": "${{ github.run_id }}",
+            "environment": "${{ matrix.environment }}"
+          }
+          EOF
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.environment }}
+          path: ${{ steps.resolve.outputs.out }}
+          retention-days: 90

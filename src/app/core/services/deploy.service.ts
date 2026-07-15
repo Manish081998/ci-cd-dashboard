@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { GIT_SERVER_BASE } from '../constants/api.constants';
-import { BuildOption, DeployAuditEntry, DeployEvent, DeployProject, DeployRequest } from '../models/pipeline.models';
+import { BuildOption, CiBuild, DeployAuditEntry, DeployEvent, DeployProject, DeployRequest } from '../models/pipeline.models';
 
 @Injectable({ providedIn: 'root' })
 export class DeployService {
@@ -23,6 +23,18 @@ export class DeployService {
       throw new Error(err.error ?? 'Failed to load build options');
     }
     return r.json();
+  }
+
+  /** Recent successful GitHub Actions builds available to deploy for a project/environment
+   *  (GET /api/projects/:id/ci-builds) — "build once, deploy same artifact". */
+  async getCiBuilds(projectId: string, environment: string): Promise<CiBuild[]> {
+    const r = await fetch(`${GIT_SERVER_BASE}/api/projects/${encodeURIComponent(projectId)}/ci-builds?environment=${encodeURIComponent(environment)}`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error ?? 'Failed to load CI builds');
+    }
+    const data = await r.json();
+    return data.builds ?? [];
   }
 
   /** Recent deploy history (GET /api/deploy/audit), optionally scoped to one project. */

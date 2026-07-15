@@ -20,7 +20,7 @@ export const PIPE_STEPS: Omit<Step, 'status' | 'detail'>[] = [
 ];
 
 export const DEPLOY_STEPS: Omit<Step, 'status' | 'detail'>[] = [
-  { id: 'publish', label: 'Publish Build',       sublabel: 'dotnet publish or npm run build (auto-detected)' },
+  { id: 'publish', label: 'Publish Build',       sublabel: 'Local build, or download + extract a CI artifact' },
   { id: 'stage',   label: 'Copy to Staging',     sublabel: 'robocopy output to staging share'          },
   { id: 'deploy',  label: 'Deploy on Server',    sublabel: 'Server pulls from staging + recycles pool' },
   { id: 'verify',  label: 'Verify Site',         sublabel: 'Health check after restart'                },
