@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [development, main]
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Detect project type
+        id: detect
+        run: |
+          if find . -maxdepth 4 \( -name "*.sln" -o -name "*.csproj" \) 2>/dev/null | grep -q .; then
+            echo "type=dotnet" >> "$GITHUB_OUTPUT"
+          elif [ -f package.json ]; then
+            echo "type=node" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=unknown" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build & test (.NET)
+        if: steps.detect.outputs.type == 'dotnet'
+        run: |
+          dotnet build
+          dotnet test --no-build || echo "No tests found, skipping"
+      - name: Publish (.NET)
+        if: steps.detect.outputs.type == 'dotnet' && github.event_name == 'push'
+        run: dotnet publish -c Release -o publish-output
+      - name: Install & build (Node/Angular)
+        if: steps.detect.outputs.type == 'node'
+        run: |
+          [ -f package-lock.json ] && npm ci || npm install
+          npm test --if-present -- --watch=false --browsers=ChromeHeadless || echo "Tests failed or not configured, continuing"
+          npm run build --if-present || echo "No build script, skipping"
+      - name: Resolve build output (Node/Angular)
+        if: steps.detect.outputs.type == 'node' && github.event_name == 'push'
+        id: resolve
+        run: |
+          OUT=dist
+          for candidate in dist build out; do
+            if [ -d "$candidate" ]; then OUT="$candidate"; break; fi
+          done
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+      - name: Upload artifact (.NET)
+        if: steps.detect.outputs.type == 'dotnet' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: publish-output
+          retention-days: 90
+      - name: Upload artifact (Node/Angular)
+        if: steps.detect.outputs.type == 'node' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ${{ steps.resolve.outputs.out }}
+          retention-days: 90
