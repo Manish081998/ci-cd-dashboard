@@ -1,0 +1,75 @@
+<div class="shell">
+
+  <!-- Header (brand + tabs + status merged into one dense row) -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-mark">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+        </span>
+        <span class="logo-text">GitDeploy</span>
+        <span class="logo-tag">AI</span>
+        <span class="header-divider"></span>
+        <span class="grad-pill compact">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm.75-10.25a.75.75 0 00-1.5 0v3.5c0 .2.08.39.22.53l2.5 2.5a.75.75 0 101.06-1.06L8.75 8.19V4.75z"/>
+          </svg>
+          AI GitOps Pipeline
+        </span>
+      </div>
+    </div>
+
+    <nav class="tabs">
+      @for (tab of tabList; track tab.id) {
+        <button class="tab" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
+          <span [innerHTML]="tab.icon"></span>
+          {{ tab.label }}
+        </button>
+      }
+    </nav>
+
+    <div class="header-right">
+      <div class="token-status" [class.configured]="token()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+          <path fill-rule="evenodd" d="M8 0a8.1 8.1 0 00-2.56 15.79c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52 0-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.68 7.68 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8.01 8.01 0 0016 8a8 8 0 00-8-8z"/>
+        </svg>
+        @if (token()) {
+          <span class="token-ok">Token configured</span>
+        } @else {
+          <span class="token-missing">No token — add to server-config.json</span>
+        }
+      </div>
+    </div>
+  </header>
+
+  <!-- Token Warning -->
+  @if (!token()) {
+    <div class="token-banner fade-in">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path fill-rule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"/>
+      </svg>
+      GitHub token not found. Add your token to <strong>server-config.json</strong> in the GitWeb folder:
+      <code>&#123; "githubToken": "ghp_..." &#125;</code>
+    </div>
+  }
+
+  <!-- Main Content -->
+  <main class="main">
+    @if (activeTab() === 'setup') {
+      <app-setup [token]="token()" class="fade-in" />
+    }
+    @if (activeTab() === 'ship') {
+      <app-ship [token]="token()" class="fade-in" />
+    }
+    @if (activeTab() === 'monitor') {
+      <app-monitor [token]="token()" class="fade-in" />
+    }
+  </main>
+
+  <footer class="footer">
+    GitDeploy AI · Built for the <strong>ai-github-ci-boilerplate</strong> workflow
+  </footer>
+
+</div>

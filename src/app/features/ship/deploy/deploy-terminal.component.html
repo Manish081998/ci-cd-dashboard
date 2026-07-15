@@ -1,0 +1,34 @@
+<div class="dtm" [class.collapsed]="!expanded()">
+  <button type="button" class="dtm-head" (click)="toggleExpanded()" [attr.aria-expanded]="expanded()">
+    <span class="dtm-chevron" [class.open]="expanded()">▸</span>
+    <span class="dtm-dot" [class.live]="running()"></span>
+    <span class="dtm-title">Live Terminal</span>
+    <span class="dtm-count">{{ lines().length }} lines</span>
+    <span class="dtm-elapsed mono">{{ totalElapsedLabel() }}</span>
+  </button>
+
+  @if (expanded()) {
+    @if (stageChips().length) {
+      <div class="dtm-chips">
+        @for (chip of stageChips(); track chip.id) {
+          <span class="dtm-chip" [class]="'dtmc-' + chip.status">
+            {{ chip.label }} <span class="mono">{{ chip.elapsed }}</span>
+          </span>
+        }
+      </div>
+    }
+
+    <div class="dtm-body" #body (scroll)="onScroll($event)">
+      @for (line of lines(); track $index) {
+        <div class="dtm-line" [class]="'dtml-' + line.kind">{{ line.text }}</div>
+      }
+      @if (running()) {
+        <span class="dtm-cursor">▋</span>
+      }
+    </div>
+
+    @if (!isPinned()) {
+      <button type="button" class="dtm-jump" (click)="jumpToLatest()">↓ Jump to latest</button>
+    }
+  }
+</div>

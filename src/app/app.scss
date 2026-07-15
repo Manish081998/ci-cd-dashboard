@@ -1,0 +1,112 @@
+/* ══ Shell ══════════════════════════════════════════════════════════════════ */
+.shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ══ Top bar — brand + tabs + status, merged into one dense row ═══════════ */
+.header {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 20px; height: 52px; flex-shrink: 0;
+  background: rgba(255,255,255,.9);
+  border-bottom: 1px solid var(--border-dim);
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(14px);
+}
+
+.logo { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.logo-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 7px;
+  background: linear-gradient(150deg, #4C63E0, #8B5CF6);
+  color: #fff;
+}
+.logo-text {
+  font-size: 13px; font-weight: 700; letter-spacing: -.2px;
+  color: var(--text-primary);
+}
+.logo-tag {
+  font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--cyan-bg);
+  color: var(--cyan); padding: 2px 6px; border-radius: 5px;
+  border: 1px solid rgba(76,99,224,.18);
+}
+.header-divider { width: 1px; height: 18px; background: var(--border-mid); margin: 0 2px; }
+
+/* ══ Brand pill (compact — lives inline in the header, not its own hero) ═══ */
+.grad-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(120deg, #4C63E0 0%, #8B5CF6 100%);
+  color: #fff; border-radius: 999px;
+  font-weight: 700; letter-spacing: -.1px;
+  &.compact { padding: 5px 12px; font-size: 12px; }
+}
+
+/* ══ Token status ══════════════════════════════════════════════════════════ */
+.header-right { display: flex; align-items: center; flex-shrink: 0; }
+.token-status {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border-dim); border-radius: 20px;
+  padding: 4px 10px 4px 9px; font-size: 11px; white-space: nowrap;
+  svg { color: var(--text-dim); flex-shrink: 0; }
+  &.configured {
+    border-color: rgba(23,165,103,.2); background: var(--green-bg);
+    svg { color: var(--green); }
+  }
+}
+.token-ok { color: var(--green); font-weight: 600; }
+.token-missing { color: var(--gold); }
+
+/* ══ Tabs (segmented control, centered in the header) ══════════════════════ */
+.tabs {
+  display: flex; gap: 2px; flex-shrink: 0;
+  background: var(--bg-elevated);
+  padding: 3px; border-radius: 10px;
+  border: 1px solid var(--border-dim);
+}
+.tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+  border: none; background: none; color: var(--text-muted); cursor: pointer;
+  transition: all .2s; white-space: nowrap;
+  &:hover { color: var(--text-primary); background: rgba(255,255,255,.6); }
+  &.active {
+    background: #fff;
+    color: var(--cyan);
+    box-shadow: var(--shadow);
+  }
+}
+
+/* ══ Token banner ══════════════════════════════════════════════════════════ */
+.token-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--gold-bg); border-bottom: 1px solid rgba(200,130,10,.18);
+  padding: 8px 20px; font-size: 12.5px; color: var(--gold);
+  strong { color: var(--text-primary); }
+  svg { flex-shrink: 0; }
+  code {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    background: rgba(255,255,255,.6); padding: 2px 8px; border-radius: 5px;
+    border: 1px solid var(--border-dim); color: var(--cyan);
+  }
+}
+
+/* ══ Main ══════════════════════════════════════════════════════════════════ */
+.main { flex: 1; padding: 16px 20px; max-width: 1400px; width: 100%; margin: 0 auto; }
+
+/* ══ Footer ════════════════════════════════════════════════════════════════ */
+.footer {
+  text-align: center; padding: 10px; font-size: 11px; color: var(--text-dim);
+  border-top: 1px solid var(--border-dim);
+  strong { color: var(--text-muted); }
+}
+
+.spin { display: inline-block; animation: sp .8s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+@keyframes fi { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fi .3s ease; }
+
+@media (max-width: 900px) {
+  .header-divider, .grad-pill.compact { display: none; }
+}
+@media (max-width: 640px) {
+  .header { flex-wrap: wrap; height: auto; padding: 8px 14px; gap: 8px; }
+  .tabs { order: 3; width: 100%; justify-content: center; }
+}

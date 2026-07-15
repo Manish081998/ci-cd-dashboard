@@ -1,0 +1,49 @@
+{
+  "githubToken": "github_pat_...",
+  "deploy": {
+    "server": "",
+    "sharePath": "",
+    "destPath": "",
+    "appPoolName": "",
+    "username": "",
+    "password": "",
+    "healthCheckUrl": ""
+  },
+  "credentials": {
+    "iis-default": {
+      "username": "",
+      "password": ""
+    }
+  },
+  "projects": [
+    {
+      "id": "example-web",
+      "name": "Example Web",
+      "type": "angular",
+      "repo": "your-org/example-web",
+      "environments": {
+        "uat": {
+          "server": "",
+          "sharePath": "",
+          "destPath": "",
+          "appPoolName": "",
+          "credentialRef": "iis-default",
+          "useSsl": true,
+          "backupPath": "",
+          "healthCheckUrl": "",
+          "buildCommand": "npm run build:qa"
+        },
+        "production": {
+          "server": "",
+          "sharePath": "",
+          "destPath": "",
+          "appPoolName": "",
+          "credentialRef": "iis-default",
+          "backupPath": "",
+          "healthCheckUrl": "",
+          "buildCommand": "npm run build:prod"
+        }
+      }
+    }
+  ]
+}

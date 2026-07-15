@@ -1,0 +1,40 @@
+<div class="dpo" [class.dpo-error]="hasError()">
+  <div class="dpo-head">
+    <span class="dpo-title">Overall Deployment Progress</span>
+    <span class="dpo-pct" [class.err]="hasError()">{{ overall().pct }}%</span>
+  </div>
+
+  <div class="dpo-bar-track">
+    <div class="dpo-bar-fill" [class.err]="hasError()" [style.width.%]="overall().pct"></div>
+  </div>
+
+  <div class="dpo-now">
+    <div class="dpo-now-col">
+      <span class="dpo-now-label">Current Stage</span>
+      <span class="dpo-now-val">{{ overall().currentStageLabel }}</span>
+    </div>
+    <div class="dpo-now-col dpo-now-col--wide">
+      <span class="dpo-now-label">Current Task</span>
+      <span class="dpo-now-val mono">{{ overall().currentTaskLabel }}</span>
+    </div>
+  </div>
+
+  <div class="dpo-metrics">
+    <div class="dpo-metric">
+      <span class="dpo-metric-label">Completed Tasks</span>
+      <span class="dpo-metric-val">{{ overall().completedOps }} / {{ overall().totalOps }}</span>
+    </div>
+    <div class="dpo-metric">
+      <span class="dpo-metric-label">Elapsed Time</span>
+      <span class="dpo-metric-val mono">{{ elapsedLabel() }}</span>
+    </div>
+    <div class="dpo-metric">
+      <span class="dpo-metric-label">Estimated Remaining</span>
+      <span class="dpo-metric-val mono">{{ remainingLabel() }}</span>
+    </div>
+    <div class="dpo-metric">
+      <span class="dpo-metric-label">Deployment Speed</span>
+      <span class="dpo-metric-val">{{ speed() }} tasks/min</span>
+    </div>
+  </div>
+</div>

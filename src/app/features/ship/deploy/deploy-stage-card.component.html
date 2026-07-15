@@ -1,0 +1,35 @@
+<div class="dsc" [class]="'dsc-' + stage().status">
+  <button type="button" class="dsc-head" (click)="toggleExpanded()" [attr.aria-expanded]="expanded()">
+    <span class="dsc-chevron" [class.open]="expanded()">▸</span>
+    <app-deploy-status-icon [status]="stage().status" />
+    <span class="dsc-label">{{ stage().label }}</span>
+    <span class="dsc-count">{{ stage().operations.length }} ops</span>
+    <div class="dsc-bar-track">
+      <div class="dsc-bar-fill" [class]="'dscf-' + stage().status" [style.width.%]="stage().progressPct"></div>
+    </div>
+    <span class="dsc-pct">{{ stage().progressPct }}%</span>
+    <span class="dsc-pill" [class]="'dscp-' + stage().status">
+      {{ stage().status === 'idle' ? 'Pending' : stage().status === 'running' ? 'Running' : stage().status === 'done' ? 'Completed' : stage().status === 'error' ? 'Failed' : 'Skipped' }}
+    </span>
+  </button>
+
+  @if (expanded()) {
+    <div class="dsc-body">
+      @if (stage().detail) {
+        <div class="dsc-detail">{{ stage().detail }}</div>
+      }
+      @for (op of stage().operations; track op.id) {
+        <app-deploy-operation-row [operation]="op" />
+      }
+
+      @if (stage().logLines.length || stage().status !== 'idle') {
+        <button type="button" class="dsc-logs-toggle" (click)="toggleLogs($event)">
+          {{ showLogs() ? '▾ Hide logs' : '▸ View logs' }}
+        </button>
+        @if (showLogs()) {
+          <app-deploy-log-panel [lines]="stage().logLines" [autoScroll]="stage().status === 'running'" />
+        }
+      }
+    </div>
+  }
+</div>

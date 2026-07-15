@@ -1,0 +1,594 @@
+<div class="ship fade-in">
+
+  <!-- ══ WIZARD STEPPER ═══════════════════════════════════════════════════ -->
+  <div class="wizard-steps">
+    <button type="button" class="wizard-step" [class.active]="wizardStep() === 1" [class.done]="wizardStep() > 1" (click)="goToStep(1)">
+      <span class="wizard-step-num">1</span>
+      <span class="wizard-step-copy">
+        <span class="wizard-step-label">Select Project</span>
+        @if (selectedProject(); as p) { <span class="wizard-step-sub">{{ p.name }}</span> }
+      </span>
+    </button>
+    <span class="wizard-arrow" [class.lit]="wizardStep() > 1">→</span>
+    <button type="button" class="wizard-step" [class.active]="wizardStep() === 2" [class.done]="wizardStep() > 2"
+      [disabled]="!selectedProjectId()" (click)="goToStep(2)">
+      <span class="wizard-step-num">2</span>
+      <span class="wizard-step-copy">
+        <span class="wizard-step-label">Push &amp; Ship</span>
+        <span class="wizard-step-sub">{{ gitDone() ? 'Shipped' : (gitStarted() ? 'In progress' : 'Not started') }}</span>
+      </span>
+    </button>
+    <span class="wizard-arrow" [class.lit]="wizardStep() > 2">→</span>
+    <button type="button" class="wizard-step" [class.active]="wizardStep() === 3"
+      [disabled]="!canGoStep3()" (click)="goToStep(3)">
+      <span class="wizard-step-num">3</span>
+      <span class="wizard-step-copy">
+        <span class="wizard-step-label">Deploy</span>
+        <span class="wizard-step-sub">{{ deployDone() ? 'Deployed' : (deployRunning() ? 'Deploying…' : 'Not started') }}</span>
+      </span>
+    </button>
+  </div>
+
+  <!-- ══ STEP 1 — SELECT PROJECT (only screen shown until a project is picked) ═ -->
+  @if (wizardStep() === 1) {
+    <div class="card step1-card fade-in">
+      <div class="step1-header">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1.75 2A1.75 1.75 0 000 3.75v1.5C0 6.216.784 7 1.75 7h12.5A1.75 1.75 0 0016 5.25v-1.5A1.75 1.75 0 0014.25 2H1.75zM3 4.5a.5.5 0 100-1 .5.5 0 000 1zM1.75 9A1.75 1.75 0 000 10.75v1.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-1.5A1.75 1.75 0 0014.25 9H1.75zM3 11.5a.5.5 0 100-1 .5.5 0 000 1z"/>
+        </svg>
+        <div>
+          <h2>Select a project</h2>
+          <p class="hint">Choose which project you want to ship &amp; deploy — everything else follows from this.</p>
+        </div>
+      </div>
+      <div class="field step1-field">
+        <label>Project</label>
+        @if (deployProjectsLoading()) {
+          <span class="hint">Loading projects…</span>
+        } @else {
+          <select class="repo-select" [ngModel]="selectedProjectId()" (ngModelChange)="selectProject($event)">
+            <option value="" disabled>Select a project…</option>
+            @for (p of deployProjects(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+          </select>
+        }
+      </div>
+    </div>
+  }
+
+  @if (wizardStep() >= 2) {
+
+  <!-- ══ LIVE STATS STRIP ═══════════════════════════════════════════════ -->
+  <div class="stats-strip fade-in">
+    <div class="stat-tile">
+      <span class="stat-tile-label">Repository</span>
+      <span class="stat-tile-val mono-inline truncate">{{ repoDisplayName() }}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-tile-label">Success Rate</span>
+      <span class="stat-tile-val" [class.ok]="successRateLabel() !== '—'" [class.bad]="overallHasError()">{{ successRateLabel() }}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-tile-label">Merge Time</span>
+      <span class="stat-tile-val">{{ mergeElapsedLabel() ?? '—' }}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-tile-label">Open PRs</span>
+      <span class="stat-tile-val" [class.ok]="openPrCount() > 0">{{ openPrCount() }}</span>
+    </div>
+  </div>
+
+  <!-- ══ CONFIG ══════════════════════════════════════════════════════════ -->
+  <div class="card cfg-card">
+    <div class="cfg-top">
+      <div class="card-title">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8.878.392a1.75 1.75 0 00-1.756 0l-5.25 3.045A1.75 1.75 0 001 4.951v6.098c0 .624.332 1.2.872 1.514l5.25 3.045a1.75 1.75 0 001.756 0l5.25-3.045c.54-.313.872-.89.872-1.514V4.951c0-.624-.332-1.2-.872-1.514L8.878.392z"/>
+        </svg>
+        Deploy Pipeline
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary"
+          [disabled]="anyRunning() || !repoUrl || !solutionFolder || !description"
+          (click)="runAll()">
+          @if (anyRunning()) { <span class="spin">⟳</span> Running… }
+          @else {
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zM6.379 5.227A.25.25 0 006 5.442v5.117a.25.25 0 00.379.214l4.264-2.559a.25.25 0 000-.428L6.379 5.227z"/>
+            </svg>
+            Push &amp; Ship
+          }
+        </button>
+        @if ((gitDone() || pipeDone()) && !anyRunning()) {
+          <button class="btn-ghost" (click)="resetAll()">↺ Reset</button>
+        }
+      </div>
+    </div>
+
+    <div class="cfg-grid">
+      <div class="field span2">
+        <label>Solution Folder <span class="required-mark">*</span> <span class="hint">(where your project lives — used for push, build &amp; deploy)</span></label>
+        <input [(ngModel)]="solutionFolder" [disabled]="anyRunning()"
+          placeholder="c:\Users\you\Projects\ClaudeDotNetCoreAPIExample" />
+      </div>
+      <div class="field span2">
+        <label>Repository URL
+          @if (reposLoading()) { <span class="hint">loading…</span> }
+          @else if (repos().length) { <span class="hint">({{ repos().length }} repos)</span> }
+        </label>
+        @if (repos().length) {
+          <select [(ngModel)]="repoUrl" (ngModelChange)="fetchBranches()" [disabled]="anyRunning()" class="repo-select">
+            <option value="" disabled>Select a repository…</option>
+            @for (r of repos(); track r.clone_url) {
+              <option [value]="r.clone_url">{{ r.full_name }}</option>
+            }
+          </select>
+        } @else {
+          <input [(ngModel)]="repoUrl" (ngModelChange)="fetchBranches()" [disabled]="anyRunning()"
+            placeholder="https://github.com/username/repo.git" />
+        }
+      </div>
+      <div class="field span4">
+        <label>What did you change? <span class="hint">(becomes commit message &amp; PR title)</span></label>
+        <div class="input-with-btn">
+          <input [(ngModel)]="description" [disabled]="anyRunning()"
+            placeholder="e.g. Added InsertTicket POST endpoint with DTOs, service, and repository layers" />
+          <button class="btn-generate"
+            [disabled]="anyRunning() || generating() || !solutionFolder"
+            (click)="generateMessage()">
+            @if (generating()) { <span class="spin">⟳</span> Generating… }
+            @else { ✦ Generate }
+          </button>
+        </div>
+        @if (generateError()) {
+          <span class="generate-error">⚠ {{ generateError() }}</span>
+        }
+      </div>
+      <div class="field">
+        <label>Source branch
+          @if (branchesLoading()) { <span class="hint">loading…</span> }
+          @else if (branches().length) { <span class="hint">({{ branches().length }})</span> }
+        </label>
+        @if (branches().length) {
+          <select [(ngModel)]="headBranch" [disabled]="anyRunning()" class="repo-select">
+            @for (b of branches(); track b.name) { <option [value]="b.name">{{ b.name }}</option> }
+          </select>
+        } @else {
+          <input [(ngModel)]="headBranch" placeholder="development" [disabled]="anyRunning()" />
+        }
+      </div>
+      <div class="field">
+        <label>Target branch
+          @if (branchesLoading()) { <span class="hint">loading…</span> }
+          @else if (branches().length) { <span class="hint">({{ branches().length }})</span> }
+        </label>
+        @if (branches().length) {
+          <select [(ngModel)]="baseBranch" [disabled]="anyRunning()" class="repo-select">
+            @for (b of branches(); track b.name) { <option [value]="b.name">{{ b.name }}</option> }
+          </select>
+        } @else {
+          <input [(ngModel)]="baseBranch" placeholder="main" [disabled]="anyRunning()" />
+        }
+      </div>
+    </div>
+
+    @if (!serverOnline()) {
+      <div class="server-warn">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+          <path fill-rule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"/>
+        </svg>
+        Git server not running — start it with <span class="mono-hi">npm start</span> in the GitWeb folder, then refresh.
+      </div>
+    }
+  </div>
+
+  <!-- ══ PIPELINE — lane diagram ══════════════════════════════════════════ -->
+  @if (gitStarted()) {
+    <div class="card diagram-card fade-in">
+      <div class="diagram-header">
+        <span class="chart-title">How This Deploy Works</span>
+        <div class="chart-badges">
+          @if (overallRunning()) {
+            <span class="badge info"><span class="pdot blue"></span> Running</span>
+          } @else if (overallHasError()) {
+            <span class="badge error"><span class="pdot red"></span> Failed at {{ failedStepLabel() }}</span>
+          } @else if (pipeDone()) {
+            <span class="badge success"><span class="pdot green"></span> Complete</span>
+          }
+        </div>
+      </div>
+
+      <div class="lanes">
+
+        <!-- LANE 1 — Development -->
+        <div class="lane">
+          <div class="lane-pill" [class]="'lp-' + groupStatus(gitSteps())">Development</div>
+
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('build'), icon: 'code' }"></ng-container>
+          <span class="arrow-down"></span>
+
+          <div class="ref-pill" [class]="'rp-' + groupStatus(gitSteps())">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/></svg>
+            {{ headBranch }}
+          </div>
+          <span class="arrow-down"></span>
+
+          <div class="group-box">
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('checkout') }"></ng-container>
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('add') }"></ng-container>
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('status') }"></ng-container>
+          </div>
+          <span class="arrow-down"></span>
+
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('commit'), icon: 'commit' }"></ng-container>
+          <span class="arrow-down"></span>
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('push'), icon: 'github' }"></ng-container>
+
+          <div class="lane-dot" [class]="'ld-' + groupStatus(gitSteps())"></div>
+        </div>
+
+        <!-- LANE 2 — Pull Request -->
+        <div class="lane" [class.lane-disabled]="!pipeStarted()">
+          <div class="lane-pill" [class]="'lp-' + groupStatus(pipeGroupA())">Pull Request</div>
+
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('validate'), icon: 'shield' }"></ng-container>
+          <span class="arrow-down"></span>
+
+          <div class="group-box">
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('branches') }"></ng-container>
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('check-pr') }"></ng-container>
+          </div>
+          <span class="arrow-down"></span>
+
+          <div class="ref-pill" [class]="'rp-' + (stepById('create-pr').status)">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/></svg>
+            {{ prResult() ? ('PR #' + prResult()!.number) : 'Create PR' }}
+          </div>
+
+          <div class="lane-dot" [class]="'ld-' + groupStatus(pipeGroupA())"></div>
+        </div>
+
+        <!-- LANE 3 — CI Checks -->
+        <div class="lane" [class.lane-disabled]="!pipeStarted()">
+          <div class="lane-pill" [class]="'lp-' + groupStatus(pipeGroupB().slice(0,2))">CI Checks</div>
+
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('auto-merge'), icon: 'check-shield' }"></ng-container>
+          <span class="arrow-down"></span>
+          <ng-container *ngTemplateOutlet="nodeTpl; context: { step: stepById('monitor-ci'), icon: 'radar' }"></ng-container>
+
+          <div class="lane-dot" [class]="'ld-' + groupStatus(pipeGroupB().slice(0,2))"></div>
+        </div>
+
+        <!-- LANE 4 — Merge -->
+        <div class="lane" [class.lane-disabled]="!pipeStarted()">
+          <div class="lane-pill" [class]="'lp-' + stepById('pr-merge').status">Merge</div>
+
+          <div class="merge-box" [class]="'mb-' + stepById('pr-merge').status">
+            <div class="merge-box-head">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+              Merge Gate
+            </div>
+            <ng-container *ngTemplateOutlet="miniTpl; context: { step: stepById('pr-merge'), wide: true }"></ng-container>
+            <div class="target-pill">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8.22 2.97a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06l2.97-2.97H3.75a.75.75 0 010-1.5h6.44L8.22 4.03a.75.75 0 010-1.06z"/></svg>
+              {{ baseBranch }}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      @if (pipeStarted()) {
+        <div class="lane-connector">
+          <span class="lc-dot" [class]="'lcd-' + groupStatus(gitSteps())"></span>
+          <span class="lc-line" [class]="'lcl-' + groupStatus(pipeGroupA())"></span>
+          <span class="lc-dot" [class]="'lcd-' + groupStatus(pipeGroupA())"></span>
+          <span class="lc-line" [class]="'lcl-' + groupStatus(pipeGroupB().slice(0,2))"></span>
+          <span class="lc-dot" [class]="'lcd-' + groupStatus(pipeGroupB().slice(0,2))"></span>
+          <span class="lc-chip" [class]="'lcc-' + groupStatus(pipeGroupB().slice(2))">Auto-merge</span>
+          <span class="lc-line" [class]="'lcl-' + stepById('pr-merge').status"></span>
+          <span class="lc-dot" [class]="'lcd-' + stepById('pr-merge').status"></span>
+        </div>
+      }
+
+      @if (overallHasError()) {
+        <div class="retry-chip">↺ Fix the issue above and reset to retry</div>
+      }
+
+      <!-- Inspector -->
+      @if (activeDetail(); as s) {
+        <div class="inspector" [class]="'dp-' + s.status">
+          <span class="dp-dot" [class]="'dpd-' + s.status"></span>
+          <span class="dp-name">{{ s.label }}</span>
+          <span class="dp-sep">·</span>
+          <span class="dp-status">{{ s.status }}</span>
+          @if (s.detail) { <span class="dp-text mono-inline">{{ s.detail }}</span> }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ══ PR RESULT — floating deployment card ═══════════════════════════ -->
+  @if (prResult(); as pr) {
+    <div class="pr-float fade-in" [class.pr-merged]="pr.merged">
+      <div class="pr-float-top">
+        <div class="pr-float-id">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="pr-svg">
+            <path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+          </svg>
+          <div>
+            <div class="pr-float-title">PR #{{ pr.number }} <span class="pr-branches mono-inline">{{ headBranch }} → {{ baseBranch }}</span></div>
+            <a [href]="pr.url" target="_blank" class="pr-float-link">{{ pr.url }}</a>
+          </div>
+        </div>
+        <div class="pr-float-pills">
+          <span class="pr-pill" [class.merged]="pr.merged">{{ pr.merged ? 'Merged' : (pr.status === 'created' ? 'PR Created' : 'PR Found') }}</span>
+          <span class="pr-pill accent">auto-merge</span>
+        </div>
+      </div>
+
+      <div class="pr-float-grid">
+        <div class="pr-stat">
+          <span class="pr-stat-label">Checks Passed</span>
+          <span class="pr-stat-val" [class.ok]="checksPassed() === checksTotal()">{{ checksPassed() }}/{{ checksTotal() }}</span>
+        </div>
+        <div class="pr-stat">
+          <span class="pr-stat-label">Merge Time</span>
+          <span class="pr-stat-val">{{ mergeElapsedLabel() ?? '—' }}</span>
+        </div>
+        <div class="pr-stat pr-stat-wide">
+          <span class="pr-stat-label">Commit</span>
+          <span class="pr-stat-val mono-inline truncate">{{ description || ('Update ' + headBranch) }}</span>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ STEP 3 — DEPLOY — manual step, independent of the git/PR pipeline above ═ -->
+  @if (wizardStep() >= 3) {
+  @if (deployProjectsLoading()) {
+    <div class="card deploy-card fade-in"><span class="hint">Loading deploy projects…</span></div>
+  } @else if (deployProjects().length) {
+    <div class="card deploy-card fade-in">
+      <div class="cfg-top">
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1.75 2A1.75 1.75 0 000 3.75v1.5C0 6.216.784 7 1.75 7h12.5A1.75 1.75 0 0016 5.25v-1.5A1.75 1.75 0 0014.25 2H1.75zM3 4.5a.5.5 0 100-1 .5.5 0 000 1zM1.75 9A1.75 1.75 0 000 10.75v1.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-1.5A1.75 1.75 0 0014.25 9H1.75zM3 11.5a.5.5 0 100-1 .5.5 0 000 1z"/>
+          </svg>
+          Deploy to IIS
+        </div>
+        <div class="btn-group">
+          @if (deployRunning()) {
+            <button class="btn-ghost" [disabled]="deployCancelling()" (click)="cancelDeploy()">
+              @if (deployCancelling()) { <span class="spin">⟳</span> Cancelling… }
+              @else { ✕ Cancel }
+            </button>
+          }
+          @if (deployStarted() && !deployRunning()) {
+            <button class="btn-ghost" (click)="resetDeploy()">↺ Deploy another</button>
+          }
+          <button class="btn-primary"
+            [disabled]="!canDeploy() || !solutionFolder"
+            (click)="deploy()">
+            @if (deployRunning()) { <span class="spin">⟳</span> Deploying… }
+            @else { 🚀 Deploy to IIS }
+          </button>
+        </div>
+      </div>
+
+      @if (!prResult()?.merged) {
+        <span class="hint">⚠ No merged PR detected yet — this deploys whatever is currently built for the selected project below, independent of git/PR status.</span>
+      }
+
+      @if (selectedProject()?.type === 'prebuilt') {
+        <span class="hint">⚠ {{ selectedProject()?.name }} isn't built by this dashboard — publish it from Visual Studio to <span class="mono-hi">{{ solutionFolder }}</span> first, then click Deploy to IIS to ship that output.</span>
+      }
+
+      @if (!deployStarted()) {
+        @if (selectedProject()?.hasCiRepo) {
+          <div class="btn-group deploy-source-toggle">
+            <button type="button" class="btn-ghost" [class.active]="deploySource() === 'ci'" [disabled]="deployRunning()" (click)="setDeploySource('ci')">📦 Deploy CI Build</button>
+            <button type="button" class="btn-ghost" [class.active]="deploySource() === 'local'" [disabled]="deployRunning()" (click)="setDeploySource('local')">🏗 Build Locally</button>
+          </div>
+          <span class="hint">
+            @if (deploySource() === 'ci') { Ships the exact artifact a GitHub Actions run already built and tested — nothing rebuilds here. }
+            @else { Builds from the Solution Folder on this machine right now. }
+          </span>
+        }
+
+        <div class="cfg-grid">
+          <div class="field span2">
+            <label>Environment</label>
+            <select class="repo-select" [ngModel]="selectedEnvironment()" (ngModelChange)="selectEnvironment($event)" [disabled]="deployRunning()">
+              @for (e of selectedProject()?.environments ?? []; track e.name) {
+                <option [value]="e.name">{{ e.name }}{{ e.configured ? '' : ' — not configured' }}</option>
+              }
+            </select>
+          </div>
+
+          @if (deploySource() === 'ci') {
+            <div class="field span2">
+              <label>CI Build
+                @if (ciBuildsLoading()) { <span class="hint">loading…</span> }
+              </label>
+              @if (ciBuilds().length) {
+                <select class="repo-select" [ngModel]="selectedCiArtifactId()" (ngModelChange)="selectedCiArtifactId.set($event)" [disabled]="deployRunning()">
+                  @for (b of ciBuilds(); track b.artifactId) {
+                    <option [ngValue]="b.artifactId">{{ b.branch }}@{{ b.shortSha }} · run #{{ b.runNumber ?? '?' }} · {{ b.createdAt | date:'short' }}{{ b.commitMessage ? ' · ' + b.commitMessage : '' }}</option>
+                  }
+                </select>
+              } @else if (ciBuildsError()) {
+                <span class="generate-error">⚠ {{ ciBuildsError() }}</span>
+              } @else {
+                <span class="hint">No successful CI builds with an uploaded artifact found for this environment yet.</span>
+              }
+            </div>
+          } @else {
+            <div class="field span2">
+              <label>Build command
+                @if (buildOptionsLoading()) { <span class="hint">detecting…</span> }
+              </label>
+              @if (buildOptions().length) {
+                <select class="repo-select" [ngModel]="selectedBuildOptionId()" (ngModelChange)="selectedBuildOptionId.set($event)" [disabled]="deployRunning()">
+                  @for (o of buildOptions(); track o.id) { <option [value]="o.id">{{ o.label }}</option> }
+                </select>
+              } @else if (buildOptionsError()) {
+                <span class="generate-error">⚠ {{ buildOptionsError() }}</span>
+              } @else if (selectedProject()?.type === 'prebuilt') {
+                <span class="hint">None — publish from Visual Studio first, this just ships the existing output.</span>
+              } @else {
+                <span class="hint">No build commands detected for this project.</span>
+              }
+            </div>
+          }
+
+          @if (selectedEnvInfo() && !selectedEnvInfo()!.configured) {
+            <div class="field span4">
+              <span class="generate-error">⚠ "{{ selectedEnvironment() }}" isn't fully configured for {{ selectedProject()?.name }} yet — add its server/share/app pool/credential to server-config.json.</span>
+            </div>
+          }
+
+          @if (requiresApproval()) {
+            <div class="field span4">
+              <label>Type "{{ selectedEnvironment() }}" to confirm this deploy <span class="hint">(required for this environment)</span></label>
+              <input [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" [disabled]="deployRunning()" [placeholder]="selectedEnvironment()" />
+            </div>
+          }
+        </div>
+
+        @if (deployHistory().length) {
+          <div class="deploy-history">
+            <span class="hint">Recent deploys for this project</span>
+            @for (h of deployHistory(); track h.time) {
+              <div class="history-row">
+                <span class="pdot" [class.green]="h.outcome === 'success'" [class.red]="h.outcome !== 'success'"></span>
+                <span class="mono-inline">{{ h.environment }}</span>
+                <span>{{ h.outcome === 'success' ? 'Succeeded' : 'Failed at ' + h.stage }}</span>
+                @if (h.ci?.sha) {
+                  <span class="hint mono-inline">📦 {{ h.ci?.branch }}@{{ h.ci?.sha?.slice(0, 7) }}{{ h.ci?.runNumber ? ' #' + h.ci?.runNumber : '' }}</span>
+                }
+                <span class="hint">{{ h.time | date:'short' }} · {{ h.user }}</span>
+              </div>
+            }
+          </div>
+        }
+      }
+
+      @if (deployStarted()) {
+        <app-deploy-view-toggle [mode]="deployViewMode()" (modeChange)="setDeployViewMode($event)" />
+
+        @if (deployViewMode() === 'basic') {
+          <!-- Basic View — unchanged from the original 4-stage pipeline -->
+          <div class="group-box deploy-steps">
+            @for (s of deploySteps(); track s.id) {
+              <ng-container *ngTemplateOutlet="miniTpl; context: { step: s }"></ng-container>
+            }
+          </div>
+
+          @if (deployActiveDetail(); as s) {
+            <div class="inspector" [class]="'dp-' + s.status">
+              <span class="dp-dot" [class]="'dpd-' + s.status"></span>
+              <span class="dp-name">{{ s.label }}</span>
+              <span class="dp-sep">·</span>
+              <span class="dp-status">{{ s.status }}</span>
+              @if (s.detail) { <span class="dp-text mono-inline">{{ s.detail }}</span> }
+            </div>
+          }
+        } @else {
+          <!-- Advanced View — granular operation breakdown (frontend-only, see plan) -->
+          <app-deploy-progress-overview
+            [overall]="deployOverall()"
+            [elapsedLabel]="deployElapsedLabel()"
+            [remainingLabel]="deployRemainingLabel()"
+            [speed]="deploySpeedValue()"
+            [hasError]="deployHasError()" />
+          <app-deploy-terminal
+            [lines]="deployTerminalLines()"
+            [stages]="deployStageViews()"
+            [running]="deployRunning()"
+            [now]="deployNowTick()"
+            [totalElapsedLabel]="deployElapsedLabel()" />
+          <app-deploy-stage-list [stages]="deployStageViews()" />
+          <app-deploy-timeline [stages]="deployStageViews()" />
+          @if (deployHasError()) {
+            <app-deploy-failure-banner [stages]="deployStageViews()" [message]="deployError()" />
+          }
+        }
+
+        @if (deployDone() && !deployHasError()) {
+          <div class="deploy-success">✓ Deployed {{ selectedProject()?.name }} to {{ selectedEnvironment() }}</div>
+        }
+        @if (deployError()) {
+          <span class="generate-error">⚠ {{ deployError() }}</span>
+        }
+      }
+    </div>
+  }
+  }
+
+  }
+
+</div>
+
+<!-- ── Reusable templates ─────────────────────────────────────────────── -->
+<ng-template #nodeTpl let-step="step" let-icon="icon">
+  <div class="lnode" [class]="'ln-' + step.status" [class.selected]="selectedId() === step.id" (click)="selectStep(step.id)">
+    <div class="lnode-ring">
+      <ng-container *ngTemplateOutlet="iconTpl; context: { $implicit: step.status, kind: icon }"></ng-container>
+    </div>
+    <div class="lnode-copy">
+      <span class="lnode-label">{{ step.label }}</span>
+      <span class="lnode-sub">{{ step.sublabel }}</span>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #miniTpl let-step="step" let-wide="wide">
+  <div class="lmini" [class]="'lm-' + step.status" [class.wide]="wide" [class.selected]="selectedId() === step.id" (click)="selectStep(step.id)">
+    <div class="lmini-ring">
+      <ng-container *ngTemplateOutlet="iconTpl; context: { $implicit: step.status }"></ng-container>
+    </div>
+    <span class="lmini-label">{{ step.label }}</span>
+  </div>
+</ng-template>
+
+<ng-template #iconTpl let-status let-kind="kind">
+  @if (status === 'running') { <span class="spin ni blue">⟳</span> }
+  @else if (status === 'done') {
+    <svg class="ni green" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 111.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+    </svg>
+  } @else if (status === 'error') {
+    <svg class="ni red" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+    </svg>
+  } @else if (status === 'skipped') {
+    <svg class="ni muted" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/>
+    </svg>
+  } @else if (kind === 'github') {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+    </svg>
+  } @else if (kind === 'shield') {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M7.467.133a1.75 1.75 0 011.066 0l5.25 1.68A1.75 1.75 0 0115 3.48V7c0 1.566-.32 3.182-1.303 4.682-.983 1.498-2.585 2.813-5.032 3.855a1.7 1.7 0 01-1.33 0c-2.447-1.042-4.049-2.357-5.032-3.855C1.32 10.182 1 8.566 1 7V3.48a1.75 1.75 0 011.217-1.667l5.25-1.68z"/>
+    </svg>
+  } @else if (kind === 'check-shield') {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 1l6 2v4c0 4-3 6.5-6 8-3-1.5-6-4-6-8V3l6-2z" opacity=".55"/>
+      <path fill-rule="evenodd" d="M11.03 6.03a.75.75 0 00-1.06-1.06L7.5 7.44 6.03 5.97a.75.75 0 00-1.06 1.06l2 2a.75.75 0 001.06 0l3-3z"/>
+    </svg>
+  } @else if (kind === 'radar') {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zM6.379 5.227A.25.25 0 006 5.442v5.117a.25.25 0 00.379.214l4.264-2.559a.25.25 0 000-.428L6.379 5.227z"/>
+    </svg>
+  } @else if (kind === 'commit') {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M10.5 7.75a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zm1.43.75a4.002 4.002 0 01-7.86 0H.75a.75.75 0 110-1.5h3.32a4.001 4.001 0 017.86 0h3.32a.75.75 0 110 1.5h-3.32z"/>
+    </svg>
+  } @else {
+    <svg class="ni idle" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fill-rule="evenodd" d="M4.72 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L8.44 8 4.72 4.28a.75.75 0 010-1.06z"/>
+    </svg>
+  }
+</ng-template>

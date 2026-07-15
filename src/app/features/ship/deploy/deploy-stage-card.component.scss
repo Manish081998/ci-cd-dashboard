@@ -1,0 +1,41 @@
+.dsc {
+  border: 1px solid var(--border-dim); border-radius: 12px; background: #fff;
+  margin-bottom: 8px; overflow: hidden; transition: border-color .15s ease;
+}
+.dsc-running { border-color: rgba(76,99,224,.35); box-shadow: 0 0 0 3px var(--cyan-glow); }
+.dsc-error   { border-color: rgba(225,68,92,.35); background: var(--red-bg); }
+.dsc-done    { border-color: rgba(23,165,103,.25); }
+
+.dsc-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  background: transparent; border: none; cursor: pointer; text-align: left; font: inherit;
+}
+.dsc-chevron { color: var(--text-dim); font-size: 10px; transition: transform .15s ease; }
+.dsc-chevron.open { transform: rotate(90deg); }
+.dsc-label { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.dsc-count { font-size: 10px; color: var(--text-dim); font-weight: 600; }
+
+.dsc-bar-track { flex: 1; height: 6px; border-radius: 999px; background: var(--border-dim); overflow: hidden; min-width: 60px; }
+.dsc-bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; background: var(--cyan); }
+.dscf-done  { background: var(--green); }
+.dscf-error { background: var(--red); }
+.dscf-idle  { background: var(--border-mid); }
+
+.dsc-pct { font-size: 11.5px; font-weight: 700; color: var(--text-muted); min-width: 34px; text-align: right; }
+
+.dsc-pill {
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-dim); color: var(--text-dim); background: var(--bg-elevated);
+}
+.dscp-running { color: var(--cyan); border-color: rgba(76,99,224,.3); background: var(--cyan-bg); }
+.dscp-done    { color: var(--green); border-color: rgba(23,165,103,.3); background: var(--green-bg); }
+.dscp-error   { color: var(--red); border-color: rgba(225,68,92,.3); background: var(--red-bg); }
+
+.dsc-body { padding: 4px 14px 12px 38px; border-top: 1px dashed var(--border-dim); }
+.dsc-detail { font-size: 11px; color: var(--text-muted); font-style: italic; padding: 6px 0 2px; }
+
+.dsc-logs-toggle {
+  margin-top: 6px; background: none; border: none; cursor: pointer; padding: 2px 0;
+  font-size: 11px; font-weight: 700; color: var(--cyan);
+}
+.dsc-logs-toggle:hover { text-decoration: underline; }

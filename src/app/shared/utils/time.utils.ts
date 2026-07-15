@@ -1,0 +1,10 @@
+/**
+ * Returns the current time as HH:MM:SS in en-GB locale.
+ */
+export function currentTimestamp(): string {
+  return new Date().toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}

@@ -1,0 +1,35 @@
+.dpo {
+  background: var(--bg-elevated); border: 1px solid var(--border-dim); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.dpo-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.dpo-title { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.dpo-pct { font-size: 20px; font-weight: 800; color: var(--cyan); letter-spacing: -.3px; }
+.dpo-pct.err { color: var(--red); }
+
+.dpo-bar-track {
+  height: 8px; border-radius: 999px; background: var(--border-dim); overflow: hidden; margin-bottom: 14px;
+}
+.dpo-bar-fill {
+  height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--purple));
+  transition: width .35s ease;
+}
+.dpo-bar-fill.err { background: var(--red); }
+
+.dpo-now { display: flex; gap: 20px; margin-bottom: 14px; flex-wrap: wrap; }
+.dpo-now-col { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+.dpo-now-col--wide { flex: 1; }
+.dpo-now-label { font-size: 9.5px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+.dpo-now-val { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.dpo-now-val.mono { font-family: 'SF Mono', Consolas, monospace; font-weight: 600; font-size: 11.5px; color: var(--cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dpo-metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px;
+  padding-top: 12px; border-top: 1px dashed var(--border-mid);
+}
+.dpo-metric { display: flex; flex-direction: column; gap: 3px; }
+.dpo-metric-label { font-size: 9px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+.dpo-metric-val { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.dpo-metric-val.mono { font-family: 'SF Mono', Consolas, monospace; }
+
+.dpo-error { border-color: rgba(225,68,92,.3); background: var(--red-bg); }

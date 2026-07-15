@@ -1,0 +1,217 @@
+<div class="monitor fade-in">
+
+  <!-- Header bar -->
+  <div class="monitor-bar">
+    <div class="field-inline">
+      @if (repos().length) {
+        <select [(ngModel)]="repoUrl" (ngModelChange)="onUrlChange()" class="repo-select">
+          <option value="" disabled>
+            @if (reposLoading()) { Loading repos… } @else { Select a repository… }
+          </option>
+          @for (r of repos(); track r.clone_url) {
+            <option [value]="r.clone_url">{{ r.full_name }}</option>
+          }
+        </select>
+      } @else {
+        <input [(ngModel)]="repoUrl" placeholder="https://github.com/username/repo.git"
+               (ngModelChange)="onUrlChange()" />
+      }
+    </div>
+    <div class="bar-right">
+      @if (loading()) { <span class="spin" style="color:var(--blue)">⟳</span> }
+      @if (lastRefresh()) {
+        <span class="refresh-time">Updated {{ lastRefresh() }}</span>
+      }
+      <button class="btn-refresh" (click)="load()" [disabled]="loading() || !canLoad()">Refresh</button>
+      <div class="auto-toggle" [class.on]="autoRefresh()" (click)="toggleAuto()">
+        <span class="toggle-dot"></span>
+        <span>Auto {{ autoRefresh() ? 'ON' : 'OFF' }}</span>
+      </div>
+    </div>
+  </div>
+
+  @if (!canLoad()) {
+    <div class="empty-state">
+      <div class="empty-icon">⬡</div>
+      <strong>Enter a repo URL and GitHub token to start monitoring</strong>
+      <span>Real-time CI status, PRs, and commits — all in one view</span>
+    </div>
+  }
+
+  @if (canLoad() && !loading() && !repoInfo()) {
+    <div class="empty-state">
+      <div class="empty-icon spin" style="color:var(--blue)">⟳</div>
+      <strong>Loading repository data...</strong>
+    </div>
+  }
+
+  @if (repoInfo()) {
+    <!-- Repo Header -->
+    <div class="repo-header fade-in">
+      <div class="repo-name">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/>
+        </svg>
+        <a [href]="repoInfo()!.html_url" target="_blank">{{ repoInfo()!.full_name }}</a>
+      </div>
+      <div class="repo-badges">
+        <span class="badge" [class]="repoInfo()!.visibility === 'public' ? 'info' : 'neutral'">
+          {{ repoInfo()!.visibility }}
+        </span>
+        <span class="badge" [class]="repoInfo()!.allow_auto_merge ? 'success' : 'neutral'">
+          auto-merge {{ repoInfo()!.allow_auto_merge ? 'on' : 'off' }}
+        </span>
+        <span class="badge neutral">default: {{ repoInfo()!.default_branch }}</span>
+      </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-val">{{ openPRs().length }}</span>
+        <span class="stat-label">Open PRs</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val" [class]="latestRunColor()">{{ latestRunStatus() }}</span>
+        <span class="stat-label">Latest CI</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val">{{ branches().length }}</span>
+        <span class="stat-label">Branches</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val">{{ ciRuns().length }}</span>
+        <span class="stat-label">Recent Runs</span>
+      </div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- CI Runs -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zM6.379 5.227A.25.25 0 006 5.442v5.117a.25.25 0 00.379.214l4.264-2.559a.25.25 0 000-.428L6.379 5.227z"/>
+          </svg>
+          CI Runs
+          @if (hasRunningCI()) { <span class="pulse yellow"></span> }
+        </div>
+        <div class="panel-scroll">
+          @for (run of ciRuns(); track run.id) {
+            <div class="run-row fade-in">
+              <span class="pulse" [class]="runPulse(run)"></span>
+              <div class="run-body">
+                <div class="run-top">
+                  <span class="run-name">{{ run.name }}</span>
+                  <span class="badge" [class]="runBadge(run)">{{ runLabel(run) }}</span>
+                </div>
+                <div class="run-meta">
+                  <span class="mono">{{ run.head_branch }}</span>
+                  <span>·</span>
+                  <span>{{ run.head_commit.message | slice:0:50 }}</span>
+                </div>
+                <div class="run-time">{{ run.created_at | date:'MMM d, h:mm a' }}</div>
+              </div>
+              <a [href]="run.html_url" target="_blank" class="ext-link" title="View on GitHub">↗</a>
+            </div>
+          }
+          @if (!ciRuns().length && !loading()) {
+            <div class="empty-panel">No CI runs found</div>
+          }
+        </div>
+      </div>
+
+      <!-- Open PRs -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+          </svg>
+          Open Pull Requests
+        </div>
+        <div class="panel-scroll">
+          @for (pr of openPRs(); track pr.number) {
+            <div class="pr-row fade-in">
+              <div class="pr-num">#{{ pr.number }}</div>
+              <div class="pr-body">
+                <div class="pr-top">
+                  <a [href]="pr.html_url" target="_blank" class="pr-title-link">{{ pr.title }}</a>
+                </div>
+                <div class="pr-meta">
+                  <span class="mono">{{ pr.head.ref }} → {{ pr.base.ref }}</span>
+                  @if (pr.auto_merge) { <span class="badge success">auto-merge</span> }
+                </div>
+                <div class="run-time">{{ pr.created_at | date:'MMM d, h:mm a' }}</div>
+              </div>
+            </div>
+          }
+          @if (!openPRs().length && !loading()) {
+            <div class="empty-panel">No open pull requests</div>
+          }
+        </div>
+      </div>
+
+      <!-- Recent Commits -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M10.5 7.75a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zm1.43.75a4.002 4.002 0 01-7.86 0H.75a.75.75 0 110-1.5h3.32a4.001 4.001 0 017.86 0h3.32a.75.75 0 110 1.5h-3.32z"/>
+          </svg>
+          Recent Commits · <span class="mono" style="font-size:11px">development</span>
+        </div>
+        <div class="panel-scroll">
+          @for (c of commits(); track c.sha) {
+            <div class="commit-row fade-in">
+              @if (c.author?.avatar_url) {
+                <img [src]="c.author!.avatar_url" class="avatar" />
+              } @else {
+                <div class="avatar-placeholder">{{ c.commit.author.name[0] }}</div>
+              }
+              <div class="commit-body">
+                <a [href]="c.html_url" target="_blank" class="commit-msg">{{ c.commit.message | slice:0:60 }}</a>
+                <div class="run-time">
+                  <span>{{ c.commit.author.name }}</span>
+                  <span>·</span>
+                  <span class="mono">{{ c.sha | slice:0:7 }}</span>
+                  <span>·</span>
+                  <span>{{ c.commit.author.date | date:'MMM d' }}</span>
+                </div>
+              </div>
+            </div>
+          }
+          @if (!commits().length && !loading()) {
+            <div class="empty-panel">No commits found</div>
+          }
+        </div>
+      </div>
+
+      <!-- Branches -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
+          </svg>
+          Branches
+        </div>
+        <div class="panel-scroll">
+        @for (b of branches(); track b.name) {
+          <div class="branch-row fade-in">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
+            </svg>
+            <span class="branch-name">{{ b.name }}</span>
+            @if (b.protected) { <span class="badge success">protected</span> }
+            @if (b.name === repoInfo()!.default_branch) { <span class="badge info">default</span> }
+            <span class="mono sha-tag">{{ b.commit.sha | slice:0:7 }}</span>
+          </div>
+        }
+        @if (!branches().length && !loading()) {
+          <div class="empty-panel">No branches found</div>
+        }
+        </div>
+      </div>
+
+    </div>
+  }
+
+</div>
