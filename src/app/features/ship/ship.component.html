@@ -5,7 +5,7 @@
     <button type="button" class="wizard-step" [class.active]="wizardStep() === 1" [class.done]="wizardStep() > 1" (click)="goToStep(1)">
       <span class="wizard-step-num">1</span>
       <span class="wizard-step-copy">
-        <span class="wizard-step-label">Select Project</span>
+        <span class="wizard-step-label">Select Project:</span>
         @if (selectedProject(); as p) { <span class="wizard-step-sub">{{ p.name }}</span> }
       </span>
     </button>
