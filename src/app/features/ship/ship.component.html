@@ -474,6 +474,24 @@
       }
 
       @if (deployStarted()) {
+        <div class="deploy-meta-row">
+          @if (selectedEnvironment()) {
+            <span class="badge info">{{ selectedEnvironment() }}</span>
+          }
+          <span class="badge neutral">{{ deploySource() === 'ci' ? 'CI Build' : 'Local Build' }}</span>
+          @if (deploySource() === 'ci' && selectedCiBuild(); as b) {
+            <span class="badge purple mono-inline">{{ b.branch }}@{{ b.shortSha }}@if (b.runNumber) { · #{{ b.runNumber }} }</span>
+          }
+          <span class="deploy-meta-spacer"></span>
+          @if (deployRunning()) {
+            <span class="badge info"><span class="pulse cyan"></span> Deploying</span>
+          } @else if (deployHasError()) {
+            <span class="badge error">Failed</span>
+          } @else if (deployDone()) {
+            <span class="badge success">Deployed</span>
+          }
+        </div>
+
         <app-deploy-view-toggle [mode]="deployViewMode()" (modeChange)="setDeployViewMode($event)" />
 
         @if (deployViewMode() === 'basic') {
@@ -507,7 +525,7 @@
             [running]="deployRunning()"
             [now]="deployNowTick()"
             [totalElapsedLabel]="deployElapsedLabel()" />
-          <app-deploy-stage-list [stages]="deployStageViews()" />
+          <app-deploy-stage-list [stages]="deployStageViews()" [now]="deployNowTick()" />
           <app-deploy-timeline [stages]="deployStageViews()" />
           @if (deployHasError()) {
             <app-deploy-failure-banner [stages]="deployStageViews()" [message]="deployError()" />
@@ -515,7 +533,18 @@
         }
 
         @if (deployDone() && !deployHasError()) {
-          <div class="deploy-success">✓ Deployed {{ selectedProject()?.name }} to {{ selectedEnvironment() }}</div>
+          <div class="deploy-success">
+            <span class="deploy-success-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" fill="currentColor" opacity=".14"/>
+                <path d="M7 12.5l3 3 7-7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <div class="deploy-success-copy">
+              <span class="deploy-success-title">Deployment succeeded</span>
+              <span class="deploy-success-sub">{{ selectedProject()?.name }} is live on {{ selectedEnvironment() }} · {{ deployElapsedLabel() }}</span>
+            </div>
+          </div>
         }
         @if (deployError()) {
           <span class="generate-error">⚠ {{ deployError() }}</span>

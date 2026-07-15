@@ -18,14 +18,22 @@ export type DeployViewMode = 'basic' | 'advanced';
     </div>
   `,
   styles: [`
-    .dvt { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-elevated); border: 1px solid var(--border-dim); border-radius: 999px; margin-bottom: 12px; }
+    .dvt {
+      display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-elevated);
+      border: 1px solid var(--border-dim); border-radius: 999px; margin-bottom: 12px;
+    }
     .dvt-btn {
       appearance: none; border: none; background: transparent; cursor: pointer;
-      font-size: 11.5px; font-weight: 700; color: var(--text-muted);
-      padding: 6px 14px; border-radius: 999px; transition: background .15s ease, color .15s ease;
+      font-size: 11.5px; font-weight: 700; color: var(--text-muted); letter-spacing: -.1px;
+      padding: 6px 16px; border-radius: 999px;
+      transition: background var(--dur-med, .25s) var(--ease-out, ease), color var(--dur-fast, .15s) ease, box-shadow var(--dur-med, .25s) var(--ease-out, ease);
     }
-    .dvt-btn:hover { color: var(--text-primary); }
-    .dvt-btn.active { background: #fff; color: var(--text-primary); box-shadow: var(--shadow); }
+    .dvt-btn:hover:not(.active) { color: var(--text-primary); }
+    .dvt-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    .dvt-btn.active {
+      background: var(--bg-surface); color: var(--text-primary);
+      box-shadow: var(--shadow-sm, var(--shadow)), 0 0 0 1px var(--border-dim);
+    }
   `],
 })
 export class DeployViewToggleComponent {

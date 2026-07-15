@@ -19,7 +19,7 @@ interface TimelineRow {
       <span class="dtl-title">Deployment Timeline</span>
       <div class="dtl-list" #list>
         @for (row of rows(); track row.key) {
-          <div class="dtl-row" [id]="'dtl-' + row.key" [class.active]="row.status === 'running'">
+          <div class="dtl-row" [id]="'dtl-' + row.key" [class.active]="row.status === 'running'" [class]="'dtlr-' + row.status">
             <app-deploy-status-icon [status]="row.status" />
             <span class="dtl-label">{{ row.label }}</span>
             <span class="dtl-stage">{{ row.stageLabel }}</span>
@@ -29,11 +29,18 @@ interface TimelineRow {
     </div>
   `,
   styles: [`
-    .dtl { background: var(--bg-elevated); border: 1px dashed var(--border-mid); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
-    .dtl-title { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 8px; }
-    .dtl-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
-    .dtl-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; font-size: 12px; }
+    .dtl {
+      background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: var(--radius-lg);
+      padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow-sm);
+    }
+    .dtl-title { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .6px; display: block; margin-bottom: 10px; }
+    .dtl-list { display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto; }
+    .dtl-row {
+      display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 12px;
+      transition: background var(--dur-fast) ease;
+    }
     .dtl-row.active { background: var(--cyan-bg); }
+    .dtlr-done { opacity: .82; }
     .dtl-label { color: var(--text-primary); font-weight: 600; flex: 1; }
     .dtl-stage { font-size: 9.5px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
   `],

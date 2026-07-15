@@ -1,9 +1,18 @@
 <div class="dsc" [class]="'dsc-' + stage().status">
   <button type="button" class="dsc-head" (click)="toggleExpanded()" [attr.aria-expanded]="expanded()">
+    <span class="dsc-num" [class]="'dscn-' + stage().status">
+      @if (stage().status === 'done') {
+        <app-deploy-status-icon [status]="stage().status" />
+      } @else {
+        {{ stepNumber() }}
+      }
+    </span>
     <span class="dsc-chevron" [class.open]="expanded()">▸</span>
-    <app-deploy-status-icon [status]="stage().status" />
     <span class="dsc-label">{{ stage().label }}</span>
     <span class="dsc-count">{{ stage().operations.length }} ops</span>
+    @if (duration(); as d) {
+      <span class="dsc-duration mono">{{ d }}</span>
+    }
     <div class="dsc-bar-track">
       <div class="dsc-bar-fill" [class]="'dscf-' + stage().status" [style.width.%]="stage().progressPct"></div>
     </div>
