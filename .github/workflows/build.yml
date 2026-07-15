@@ -25,7 +25,12 @@ jobs:
       - name: Run unit tests
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
-        run: npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox
+        run: |
+          if find src -name '*.spec.ts' | grep -q .; then
+            npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox
+          else
+            echo "No *.spec.ts files in src/ yet — skipping unit tests."
+          fi
 
   # Builds the exact per-environment bundle the dashboard's IIS deploy step
   # downloads and ships — "build once, deploy same artifact": nothing rebuilds
