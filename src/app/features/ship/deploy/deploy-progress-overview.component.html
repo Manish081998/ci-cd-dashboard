@@ -1,11 +1,18 @@
 <div class="dpo" [class.dpo-error]="hasError()">
   <div class="dpo-head">
-    <span class="dpo-title">Overall Deployment Progress</span>
+    <div class="dpo-eyebrow">
+      <span class="dpo-eyebrow-dot" [class.err]="hasError()" [class.done]="overall().pct >= 100 && !hasError()"></span>
+      <span class="dpo-title">Overall Deployment Progress</span>
+    </div>
     <span class="dpo-pct" [class.err]="hasError()">{{ overall().pct }}%</span>
   </div>
 
   <div class="dpo-bar-track">
-    <div class="dpo-bar-fill" [class.err]="hasError()" [style.width.%]="overall().pct"></div>
+    <div class="dpo-bar-fill" [class.err]="hasError()" [style.width.%]="overall().pct">
+      @if (!hasError() && overall().pct < 100) {
+        <span class="dpo-bar-sheen"></span>
+      }
+    </div>
   </div>
 
   <div class="dpo-now">
@@ -21,20 +28,32 @@
 
   <div class="dpo-metrics">
     <div class="dpo-metric">
+      <span class="dpo-metric-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.5 4.5l-7 7L3 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
       <span class="dpo-metric-label">Completed Tasks</span>
       <span class="dpo-metric-val">{{ overall().completedOps }} / {{ overall().totalOps }}</span>
     </div>
     <div class="dpo-metric">
+      <span class="dpo-metric-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6V8l2.6 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </span>
       <span class="dpo-metric-label">Elapsed Time</span>
       <span class="dpo-metric-val mono">{{ elapsedLabel() }}</span>
     </div>
     <div class="dpo-metric">
+      <span class="dpo-metric-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v3M8 11v3M2 8h3M11 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>
+      </span>
       <span class="dpo-metric-label">Estimated Remaining</span>
       <span class="dpo-metric-val mono">{{ remainingLabel() }}</span>
     </div>
     <div class="dpo-metric">
+      <span class="dpo-metric-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 13L6.5 5 9.5 9.5 14 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
       <span class="dpo-metric-label">Deployment Speed</span>
-      <span class="dpo-metric-val">{{ speed() }} tasks/min</span>
+      <span class="dpo-metric-val">{{ speed() }} <span class="dpo-metric-unit">tasks/min</span></span>
     </div>
   </div>
 </div>
