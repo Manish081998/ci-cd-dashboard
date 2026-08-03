@@ -44,6 +44,34 @@
           "buildCommand": "npm run build:prod"
         }
       }
+    },
+    {
+      "id": "example-api",
+      "name": "Example API",
+      "type": "dotnet",
+      "repo": "your-org/example-api",
+      "excludeFromDeploy": ["appsettings.json"],
+      "environments": {
+        "uat": {
+          "server": "",
+          "sharePath": "",
+          "destPath": "",
+          "appPoolName": "",
+          "credentialRef": "iis-default",
+          "useSsl": true,
+          "backupPath": "",
+          "healthCheckUrl": ""
+        },
+        "production": {
+          "server": "",
+          "sharePath": "",
+          "destPath": "",
+          "appPoolName": "",
+          "credentialRef": "iis-default",
+          "backupPath": "",
+          "healthCheckUrl": ""
+        }
+      }
     }
   ]
 }

@@ -411,11 +411,39 @@
                 @if (ciBuildsLoading()) { <span class="hint">loading…</span> }
               </label>
               @if (ciBuilds().length) {
-                <select class="repo-select" [ngModel]="selectedCiArtifactId()" (ngModelChange)="selectedCiArtifactId.set($event)" [disabled]="deployRunning()">
-                  @for (b of ciBuilds(); track b.artifactId) {
-                    <option [ngValue]="b.artifactId">{{ b.branch }}@{{ b.shortSha }} · run #{{ b.runNumber ?? '?' }} · {{ b.createdAt | date:'short' }}{{ b.commitMessage ? ' · ' + b.commitMessage : '' }}</option>
+                <div class="ci-picker">
+                  <button type="button" class="ci-picker-trigger" [class.open]="ciBuildPickerOpen()"
+                    [disabled]="deployRunning()" (click)="ciBuildPickerOpen.set(!ciBuildPickerOpen())">
+                    @if (selectedCiBuild(); as b) {
+                      <span class="ci-branch-badge">{{ b.branch }}</span>
+                      <span class="mono-inline">@{{ b.shortSha }}</span>
+                      <span class="ci-picker-run">run #{{ b.runNumber ?? '?' }}</span>
+                      <span class="ci-picker-date">{{ b.createdAt | date:'MMM d, y · h:mm a' }}</span>
+                    } @else {
+                      <span class="hint">Select a build…</span>
+                    }
+                    <span class="ci-picker-caret">{{ ciBuildPickerOpen() ? '▴' : '▾' }}</span>
+                  </button>
+                  @if (ciBuildPickerOpen()) {
+                    <div class="ci-dropdown-backdrop" (click)="ciBuildPickerOpen.set(false)"></div>
+                    <div class="ci-dropdown-panel" role="listbox">
+                      @for (b of ciBuilds(); track b.artifactId) {
+                        <button type="button" class="ci-dropdown-row" role="option"
+                          [attr.aria-selected]="b.artifactId === selectedCiArtifactId()"
+                          [class.active]="b.artifactId === selectedCiArtifactId()"
+                          (click)="selectCiBuild(b.artifactId)">
+                          <div class="ci-row-top">
+                            <span class="ci-branch-badge">{{ b.branch }}</span>
+                            <span class="mono-inline">@{{ b.shortSha }}</span>
+                            <span class="ci-picker-run">run #{{ b.runNumber ?? '?' }}</span>
+                            <span class="ci-row-date">{{ b.createdAt | date:'MMM d, y · h:mm a' }}</span>
+                          </div>
+                          @if (b.commitMessage) { <div class="ci-row-msg">{{ b.commitMessage }}</div> }
+                        </button>
+                      }
+                    </div>
                   }
-                </select>
+                </div>
               } @else if (ciBuildsError()) {
                 <span class="generate-error">⚠ {{ ciBuildsError() }}</span>
               } @else {

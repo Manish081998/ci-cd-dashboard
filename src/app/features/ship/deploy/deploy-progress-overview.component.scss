@@ -22,6 +22,7 @@
   height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--purple));
   transition: width .4s var(--ease-out); position: relative; overflow: hidden;
 }
+.dpo-bar-fill.done { background: var(--green); }
 .dpo-bar-fill.err { background: var(--red); }
 .dpo-bar-sheen {
   position: absolute; inset: 0; width: 50%;

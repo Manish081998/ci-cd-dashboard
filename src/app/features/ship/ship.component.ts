@@ -132,6 +132,7 @@ export class ShipComponent {
   ciBuildsLoading       = signal(false);
   ciBuildsError         = signal('');
   selectedCiArtifactId  = signal<number | null>(null);
+  ciBuildPickerOpen     = signal(false);
 
   selectedProject = computed<DeployProject | null>(() =>
     this.deployProjects().find(p => p.id === this.selectedProjectId()) ?? null);
@@ -376,10 +377,16 @@ export class ShipComponent {
     if (source === 'ci' && !this.ciBuilds().length && !this.ciBuildsLoading()) this.loadCiBuilds();
   }
 
+  selectCiBuild(artifactId: number) {
+    this.selectedCiArtifactId.set(artifactId);
+    this.ciBuildPickerOpen.set(false);
+  }
+
   async loadCiBuilds() {
     const projectId = this.selectedProjectId();
     const environment = this.selectedEnvironment();
     if (!projectId || !environment) return;
+    this.ciBuildPickerOpen.set(false);
     this.ciBuildsLoading.set(true);
     this.ciBuildsError.set('');
     try {

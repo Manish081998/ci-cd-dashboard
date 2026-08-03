@@ -693,6 +693,22 @@ async function runPublishStep(project, buildOption, folder, send, handle) {
   return { code: -1, output: `Unsupported project type: ${project.type}`, publishDir: null };
 }
 
+// Deletes files from the local publish output that must never reach a
+// server — e.g. a developer's local appsettings.json, which would overwrite
+// the environment-specific config/secrets already deployed there. Runs
+// before zipping, so an excluded file is never even transmitted (mirrors
+// deleting it from the publish folder by hand). Paths are relative to the
+// publish dir root; missing files are silently skipped.
+function stripExcludedFiles(dir, patterns, send, stepId = 'publish') {
+  for (const rel of patterns || []) {
+    const target = path.join(dir, rel);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true });
+      send({ type: 'stdout', id: stepId, text: `Excluded ${rel} from deploy package (server keeps its existing copy)\n` });
+    }
+  }
+}
+
 // ── Credentials, deploy locking, and audit log ────────────────────────────────
 // A credential value of "$ENV:NAME" is resolved from process.env at request
 // time instead of sitting in server-config.json in plaintext — lets you keep
@@ -985,6 +1001,16 @@ function buildDeployScript(cfg) {
   const backupLine = cfg.backupPath
     ? `  Write-Output 'Backing up existing deployment to ${escape(cfg.backupPath)}\\${escape(cfg.backupStamp)}...'; $backupDest = Join-Path '${escape(cfg.backupPath)}' '${escape(cfg.backupStamp)}'; if (Test-Path '${escape(cfg.destPath)}') { New-Item -ItemType Directory -Force -Path $backupDest | Out-Null; robocopy '${escape(cfg.destPath)}' "$backupDest" /E /MT:16 /R:2 /W:2 /NFL /NDL /NJH /NJS | Out-Null; if ($LASTEXITCODE -ge 8) { throw "robocopy backup failed with exit code $LASTEXITCODE" } }; Write-Output 'Backup complete';`
     : null;
+  // /XF (exclude-file) makes robocopy leave a matching filename completely
+  // alone on BOTH sides of the mirror — not copied from source, and (unlike
+  // simply omitting it from source) not purged from destPath either. Without
+  // this, a file deliberately excluded from the deploy package (see
+  // stripExcludedFiles in the publish step) looks like a stale leftover to
+  // /MIR and gets deleted from the server — the opposite of "preserve the
+  // server's existing copy" that excludeFromDeploy is meant to guarantee.
+  const xf = cfg.excludeFromDeploy?.length
+    ? ' ' + cfg.excludeFromDeploy.map(f => `/XF '${escape(f)}'`).join(' ')
+    : '';
   return [
     ...lines,
     // Write-Output checkpoints inside the remote scriptblock only — PSRP streams
@@ -1006,7 +1032,7 @@ function buildDeployScript(cfg) {
     // extra ones). Safe to wipe destPath's extras because the backup step
     // above already copied its prior contents out when backupPath is set.
     `  Write-Output 'Syncing to ${escape(cfg.destPath)}...';`,
-    `  robocopy $extractDir '${escape(cfg.destPath)}' /MIR /MT:16 /R:2 /W:2 /NFL /NDL /NJH /NJS | Out-Null;`,
+    `  robocopy $extractDir '${escape(cfg.destPath)}' /MIR /MT:16 /R:2 /W:2 /NFL /NDL /NJH /NJS${xf} | Out-Null;`,
     `  if ($LASTEXITCODE -ge 8) { throw "robocopy deploy sync failed with exit code $LASTEXITCODE" }`,
     `  Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue;`,
     `  Write-Output 'Sync complete';`,
@@ -1215,6 +1241,12 @@ app.post('/api/deploy/iis', async (req, res) => {
         return;
       }
 
+      // Env-level "excludeFromDeploy" overrides the project-level one, same
+      // precedence as "buildCommand" above — lets one environment carve out
+      // an exception without disturbing the rest.
+      const excludeFromDeploy = envCfg.excludeFromDeploy || project.excludeFromDeploy;
+      if (excludeFromDeploy?.length) stripExcludedFiles(publishRes.publishDir, excludeFromDeploy, send);
+
       // ── 2. Zip the build output and copy the single archive to staging ────
       // One file over a slow/VPN link beats mirroring hundreds of small ones.
       zipPath = path.join(os.tmpdir(), `${project.id}-${environment}-deploy.zip`);
@@ -1270,7 +1302,7 @@ app.post('/api/deploy/iis', async (req, res) => {
       // when set, the existing site is copied into a dated subfolder there
       // before the new build is extracted, so a bad deploy can be rolled back.
       const stamp = envCfg.backupPath ? backupStamp() : null;
-      const deployCfg = { server: envCfg.server, username: cred.username, password: cred.password, remoteStagePath: envCfg.sharePath, destPath: envCfg.destPath, appPoolName: envCfg.appPoolName, zipName, useSsl: !!envCfg.useSsl, backupPath: envCfg.backupPath || null, backupStamp: stamp };
+      const deployCfg = { server: envCfg.server, username: cred.username, password: cred.password, remoteStagePath: envCfg.sharePath, destPath: envCfg.destPath, appPoolName: envCfg.appPoolName, zipName, useSsl: !!envCfg.useSsl, backupPath: envCfg.backupPath || null, backupStamp: stamp, excludeFromDeploy };
       const tDeploy = Date.now();
       const deployRes = await runDeployCmd(
         'powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildDeployScript(deployCfg)], cwd, send, 'deploy', deployHandle);

@@ -63,6 +63,7 @@ build-options lookup and deploy request — see `folder` on `DeployRequest` in
 | `useSsl`         | Set `true` only if plain WinRM (port 5985) is blocked on your network — see below                                                                 |
 | `backupPath`     | Optional. A folder **on the target server itself** (e.g. `G:\Backups\SiteName`). If set, the current contents of `destPath` are copied into a dated subfolder here (`<backupPath>\yyyy-MM-dd_HH-mm-ss`) *before* the new build is extracted — so a bad deploy can be rolled back by hand. Omit to skip backups entirely (previous behavior). |
 | `healthCheckUrl` | Optional — `GET` after deploy, reports the status code. Leave `""` to skip                                                                        |
+| `excludeFromDeploy` | Optional array of filenames/paths (relative to the publish output root), e.g. `["appsettings.json"]`. Deleted from the build output right after publish, before it's zipped — so the file is never transmitted. The same list is also passed as `robocopy /XF` on the server-side `/MIR` sync in the deploy step, so that filename is left completely alone on both sides of the mirror — without this, `/MIR` would otherwise treat the server's existing copy as a stale leftover (since it's absent from the freshly-extracted source) and delete it. Can be set at project level (applies to every environment) or overridden per environment. |
 
 Build command per `type`:
 
